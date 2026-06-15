@@ -2,6 +2,11 @@
 
 Static GitHub Pages site for RoboCasa t-SNE outputs.
 
+URLs:
+
+- Repo: `https://github.com/minje227-coder/groot-robocasa-tsne`
+- Pages: `https://minje227-coder.github.io/groot-robocasa-tsne/`
+
 Top-level families:
 
 - `baseline/`
