@@ -1,0 +1,7 @@
+*.npz
+**/*.npz
+*.mp4
+**/*.mp4
+__pycache__/
+*.pyc
+.DS_Store
