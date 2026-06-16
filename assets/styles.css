@@ -241,6 +241,10 @@ svg {
   cursor: grab;
 }
 
+.chart-wrap svg.panning .chart-pan-surface {
+  cursor: grabbing;
+}
+
 .chart-wrap.pan-enabled svg.panning .chart-pan-surface {
   cursor: grabbing;
 }

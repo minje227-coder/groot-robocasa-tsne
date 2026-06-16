@@ -485,11 +485,47 @@ function updateChartViewBox() {
   if (readout) readout.textContent = `${state.chartZoom.toFixed(2)}x`;
 }
 
+function zoomChartAt(clientX, clientY, direction) {
+  const svg = document.querySelector(".chart-wrap svg");
+  if (!svg || !state.chartBaseView) return;
+  const bounds = svg.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) return;
+
+  const factor = direction < 0 ? 1.2 : (1 / 1.2);
+  const nextZoom = Math.min(8, Math.max(0.25, state.chartZoom * factor));
+  if (nextZoom === state.chartZoom) return;
+
+  const currentCenter = getChartCenter();
+  const currentWidth = state.chartBaseView.baseWidth / state.chartZoom;
+  const currentHeight = state.chartBaseView.baseHeight / state.chartZoom;
+  const currentLeft = currentCenter.x - (currentWidth / 2);
+  const currentTop = currentCenter.y - (currentHeight / 2);
+  const fracX = (clientX - bounds.left) / bounds.width;
+  const fracY = (clientY - bounds.top) / bounds.height;
+  const worldX = currentLeft + (fracX * currentWidth);
+  const worldY = currentTop + (fracY * currentHeight);
+
+  state.chartZoom = nextZoom;
+  const nextWidth = state.chartBaseView.baseWidth / state.chartZoom;
+  const nextHeight = state.chartBaseView.baseHeight / state.chartZoom;
+  state.chartCenter = {
+    x: worldX - (fracX * nextWidth) + (nextWidth / 2),
+    y: worldY - (fracY * nextHeight) + (nextHeight / 2),
+  };
+  updateChartViewBox();
+}
+
 function attachChartPan(svg) {
   const surface = svg.querySelector(".chart-pan-surface");
   if (!surface) return;
+  svg.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    zoomChartAt(event.clientX, event.clientY, event.deltaY);
+  }, { passive: false });
   surface.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 || !state.chartBaseView || !state.panMode) return;
+    const allowLeftPan = event.button === 0 && state.panMode;
+    const allowMiddlePan = event.button === 1;
+    if (!state.chartBaseView || (!allowLeftPan && !allowMiddlePan)) return;
     event.preventDefault();
     surface.setPointerCapture(event.pointerId);
     svg.classList.add("panning");
