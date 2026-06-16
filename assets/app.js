@@ -211,8 +211,16 @@ function renderChart() {
   const points = pointPayload.points.map((row) => ({
     x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
   }));
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
+  const visiblePoints = points.filter((point) => state.visibleSeqs.has(point.seq));
+  if (state.selected && !state.visibleSeqs.has(state.selected.seq)) {
+    state.selected = null;
+  }
+  if (!visiblePoints.length) {
+    wrap.innerHTML = `<p class="status">No task descriptions selected.</p>`;
+    return;
+  }
+  const xs = visiblePoints.map((p) => p.x);
+  const ys = visiblePoints.map((p) => p.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   const padX = (maxX - minX || 1) * 0.08;
@@ -223,12 +231,11 @@ function renderChart() {
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
 
   const bySeq = new Map();
-  for (const point of points) {
+  for (const point of visiblePoints) {
     if (!bySeq.has(point.seq)) bySeq.set(point.seq, []);
     bySeq.get(point.seq).push(point);
   }
   for (const [seqId, seqPoints] of bySeq) {
-    if (!state.visibleSeqs.has(Number(seqId))) continue;
     seqPoints.sort((a, b) => a.anchor - b.anchor);
     const seq = state.sequences.sequences[seqId];
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -238,8 +245,7 @@ function renderChart() {
     path.setAttribute("stroke", colors[seq.task_id % colors.length]);
     svg.appendChild(path);
   }
-  for (const point of points) {
-    if (!state.visibleSeqs.has(point.seq)) continue;
+  for (const point of visiblePoints) {
     const seq = state.sequences.sequences[point.seq];
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", point.x);
