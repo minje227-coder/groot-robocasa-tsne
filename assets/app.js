@@ -592,7 +592,7 @@ function renderChart(runId, feature) {
       const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       ring.setAttribute("cx", point.x);
       ring.setAttribute("cy", point.y);
-      ring.setAttribute("r", "1.12");
+      ring.setAttribute("r", "1.75");
       ring.setAttribute("class", "dot selected-ring");
       ring.setAttribute("fill", taskColor);
       svg.appendChild(ring);
@@ -600,7 +600,7 @@ function renderChart(runId, feature) {
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", point.x);
     c.setAttribute("cy", point.y);
-    c.setAttribute("r", isSelected(chartPoint) ? "0.54" : "0.55");
+    c.setAttribute("r", isSelected(chartPoint) ? "0.76" : "0.55");
     c.setAttribute("class", `dot${isSelected(chartPoint) ? " selected" : ""}`);
     c.setAttribute("fill", isSelected(chartPoint) ? "#ffffff" : taskColor);
     c.dataset.seq = String(point.seq);
@@ -728,7 +728,6 @@ function attachChartPan(svg, runId, feature) {
 
 function isSelected(point) {
   return state.selected
-    && state.selected.runId === point.runId
     && state.selected.seq === point.seq
     && state.selected.anchor === point.anchor
     && state.selected.frame === point.frame;

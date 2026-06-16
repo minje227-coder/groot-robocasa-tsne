@@ -114,17 +114,33 @@ body.resizing-panel {
   color: var(--ink);
   border-radius: 8px;
   padding: 10px 12px;
+  position: relative;
   text-align: left;
   cursor: pointer;
 }
 
 .family-btn.active, .run-btn.active, .tab-btn.active, .cam-btn.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: #064f8f;
+  background: #cfe8ff;
+  box-shadow: inset 4px 0 0 #064f8f, 0 0 0 1px rgba(6, 79, 143, 0.12);
+  color: #082f49;
+  font-weight: 700;
 }
 
 .run-btn.selected:not(.active) {
-  border-color: #8fb7df;
+  border-color: #63a3d8;
+  background: #edf7ff;
+  box-shadow: inset 4px 0 0 #63a3d8;
+}
+
+.run-btn.selected strong::after {
+  content: "shown";
+  margin-left: 8px;
+  color: #0f6cbd;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .run-list {
@@ -346,14 +362,14 @@ svg {
 
 .dot.selected {
   stroke: rgba(15, 23, 42, 0.82);
-  stroke-width: 1.15;
+  stroke-width: 1.45;
 }
 
 .selected-ring {
-  stroke: rgba(15, 23, 42, 0.24);
-  stroke-width: 0.28;
-  filter: drop-shadow(0 0 0.9px rgba(15, 23, 42, 0.95))
-    drop-shadow(0 0 6px rgba(15, 23, 42, 0.22));
+  stroke: #0f172a;
+  stroke-width: 0.42;
+  filter: drop-shadow(0 0 1.2px rgba(15, 23, 42, 1))
+    drop-shadow(0 0 8px rgba(15, 23, 42, 0.38));
 }
 
 .panel h2, .sidebar h2 {
