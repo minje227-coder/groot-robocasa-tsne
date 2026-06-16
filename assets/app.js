@@ -212,6 +212,10 @@ function renderSidebar() {
   sidebar.appendChild(el("div", { class: "run-list" }, runButtons.length ? runButtons : [
     el("p", { class: "status", text: "No runs published yet." }),
   ]));
+  sidebar.appendChild(el("div", { class: "sidebar-help" }, [
+    el("p", { text: "Wheel: zoom" }),
+    el("p", { text: "Wheel click + drag: pan" }),
+  ]));
 }
 
 function renderEmpty() {
