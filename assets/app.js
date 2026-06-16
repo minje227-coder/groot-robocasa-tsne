@@ -14,6 +14,11 @@ const state = {
   syncingVideos: false,
   panelWidth: 360,
   chartZoom: 1,
+  panMode: false,
+  chartCenter: null,
+  chartBaseView: null,
+  pendingPanelScrollTop: null,
+  pendingTaskPanelScrollTop: null,
 };
 
 const familyLabels = {
@@ -219,6 +224,8 @@ async function loadRun(run, options = {}) {
   state.pointsByFeature.clear();
   state.selected = null;
   state.chartZoom = 1;
+  state.chartCenter = null;
+  state.chartBaseView = null;
   renderSidebar();
   document.querySelector(".stage").innerHTML = `<div class="chart-wrap"><p class="status">Loading ${run.label || run.id}...</p></div>`;
   document.querySelector(".panel").innerHTML = "";
@@ -253,11 +260,21 @@ function renderViewer() {
 function renderTabs() {
   const zoomControls = el("div", { class: "zoom-controls" }, [
     el("button", {
+      class: `mini-btn zoom-btn pan-toggle${state.panMode ? " active" : ""}`,
+      text: "Pan",
+      onclick: () => {
+        state.panMode = !state.panMode;
+        renderTabs();
+        renderChart();
+      },
+      title: "Toggle drag pan",
+    }),
+    el("button", {
       class: "mini-btn zoom-btn",
       text: "-",
       onclick: () => {
         state.chartZoom = Math.max(1, state.chartZoom / 1.25);
-        renderChart();
+        updateChartViewBox();
       },
       title: "Zoom out",
     }),
@@ -267,7 +284,7 @@ function renderTabs() {
       text: "+",
       onclick: () => {
         state.chartZoom = Math.min(8, state.chartZoom * 1.25);
-        renderChart();
+        updateChartViewBox();
       },
       title: "Zoom in",
     }),
@@ -379,14 +396,17 @@ function renderChart() {
   const baseY = minY - padY;
   const baseWidth = (maxX - minX) + 2 * padX;
   const baseHeight = (maxY - minY) + 2 * padY;
-  const centerX = state.selected ? state.selected.x : baseX + (baseWidth / 2);
-  const centerY = state.selected ? state.selected.y : baseY + (baseHeight / 2);
-  const zoomWidth = baseWidth / state.chartZoom;
-  const zoomHeight = baseHeight / state.chartZoom;
-  const viewBox = `${centerX - (zoomWidth / 2)} ${centerY - (zoomHeight / 2)} ${zoomWidth} ${zoomHeight}`;
+  state.chartBaseView = { baseX, baseY, baseWidth, baseHeight };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", viewBox);
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("class", "chart-pan-surface");
+  bg.setAttribute("x", String(baseX));
+  bg.setAttribute("y", String(baseY));
+  bg.setAttribute("width", String(baseWidth));
+  bg.setAttribute("height", String(baseHeight));
+  bg.setAttribute("fill", "transparent");
+  svg.appendChild(bg);
 
   const bySeq = new Map();
   for (const point of visiblePoints) {
@@ -426,6 +446,7 @@ function renderChart() {
     c.dataset.frame = String(point.frame);
     c.addEventListener("click", () => {
       state.selected = point;
+      state.chartCenter = { x: point.x, y: point.y };
       renderViewer();
     });
     c.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"))
@@ -433,9 +454,67 @@ function renderChart() {
     svg.appendChild(c);
   }
   wrap.innerHTML = "";
+  wrap.classList.toggle("pan-enabled", state.panMode);
   wrap.appendChild(svg);
+  attachChartPan(svg);
+  updateChartViewBox();
+}
+
+function getChartCenter() {
+  if (!state.chartBaseView) return { x: 0, y: 0 };
+  if (state.chartCenter) return state.chartCenter;
+  if (state.selected) return { x: state.selected.x, y: state.selected.y };
+  return {
+    x: state.chartBaseView.baseX + (state.chartBaseView.baseWidth / 2),
+    y: state.chartBaseView.baseY + (state.chartBaseView.baseHeight / 2),
+  };
+}
+
+function updateChartViewBox() {
+  const svg = document.querySelector(".chart-wrap svg");
+  if (!svg || !state.chartBaseView) return;
+  const { baseWidth, baseHeight } = state.chartBaseView;
+  const center = getChartCenter();
+  const zoomWidth = baseWidth / state.chartZoom;
+  const zoomHeight = baseHeight / state.chartZoom;
+  svg.setAttribute(
+    "viewBox",
+    `${center.x - (zoomWidth / 2)} ${center.y - (zoomHeight / 2)} ${zoomWidth} ${zoomHeight}`
+  );
   const readout = document.querySelector(".zoom-readout");
   if (readout) readout.textContent = `${state.chartZoom.toFixed(2)}x`;
+}
+
+function attachChartPan(svg) {
+  const surface = svg.querySelector(".chart-pan-surface");
+  if (!surface) return;
+  surface.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || !state.chartBaseView || !state.panMode) return;
+    event.preventDefault();
+    surface.setPointerCapture(event.pointerId);
+    svg.classList.add("panning");
+    const bounds = svg.getBoundingClientRect();
+    const startCenter = getChartCenter();
+    const zoomWidth = state.chartBaseView.baseWidth / state.chartZoom;
+    const zoomHeight = state.chartBaseView.baseHeight / state.chartZoom;
+
+    const onMove = (moveEvent) => {
+      const dx = ((moveEvent.clientX - event.clientX) / bounds.width) * zoomWidth;
+      const dy = ((moveEvent.clientY - event.clientY) / bounds.height) * zoomHeight;
+      state.chartCenter = { x: startCenter.x - dx, y: startCenter.y - dy };
+      updateChartViewBox();
+    };
+    const onUp = () => {
+      svg.classList.remove("panning");
+      surface.removeEventListener("pointermove", onMove);
+      surface.removeEventListener("pointerup", onUp);
+      surface.removeEventListener("pointercancel", onUp);
+    };
+
+    surface.addEventListener("pointermove", onMove);
+    surface.addEventListener("pointerup", onUp);
+    surface.addEventListener("pointercancel", onUp);
+  });
 }
 
 function isSelected(point) {
@@ -474,6 +553,7 @@ function syncSelectionToVideo(video) {
   const point = nearestPointForFrame(state.selected.seq, frame);
   if (!point || isSelected(point)) return;
   state.selected = point;
+  state.chartCenter = { x: point.x, y: point.y };
   updateSelectedMarker();
   updateSelectionFrame();
 }
@@ -497,10 +577,19 @@ function updateSelectionFrame() {
   if (frameNode && state.selected) frameNode.textContent = String(state.selected.frame);
 }
 
+function preserveTaskPanelScroll() {
+  const panel = document.querySelector(".panel");
+  state.pendingPanelScrollTop = panel ? panel.scrollTop : 0;
+  state.pendingTaskPanelScrollTop = panel?.querySelector(".task-panel")?.scrollTop || 0;
+}
+
 function renderPanel() {
   const panel = document.querySelector(".panel");
-  const savedScrollTop = panel ? panel.scrollTop : 0;
-  const savedTaskPanelScrollTop = panel?.querySelector(".task-panel")?.scrollTop || 0;
+  const savedScrollTop = state.pendingPanelScrollTop ?? (panel ? panel.scrollTop : 0);
+  const savedTaskPanelScrollTop =
+    state.pendingTaskPanelScrollTop ?? (panel?.querySelector(".task-panel")?.scrollTop || 0);
+  state.pendingPanelScrollTop = null;
+  state.pendingTaskPanelScrollTop = null;
   const seq = state.selected ? state.sequences.sequences[state.selected.seq] : null;
   panel.innerHTML = "";
   renderTaskDescriptionPanel(panel);
@@ -540,7 +629,9 @@ function renderTaskDescriptionPanel(panel) {
   const allOn = el("button", {
     class: "mini-btn",
     text: "All ON",
+    onmousedown: (event) => event.preventDefault(),
     onclick: () => {
+      preserveTaskPanelScroll();
       state.visibleSeqs = new Set(sequences.map((seq) => seq.seq_id));
       renderViewer();
     },
@@ -548,7 +639,9 @@ function renderTaskDescriptionPanel(panel) {
   const allOff = el("button", {
     class: "mini-btn",
     text: "All OFF",
+    onmousedown: (event) => event.preventDefault(),
     onclick: () => {
+      preserveTaskPanelScroll();
       state.visibleSeqs = new Set();
       renderViewer();
     },
@@ -564,7 +657,9 @@ function renderTaskDescriptionPanel(panel) {
     const isOpen = state.openTasks.has(taskName);
     const taskButton = el("button", {
       class: `task-name${visibleCount ? " active" : " inactive"}`,
+      onmousedown: (event) => event.preventDefault(),
       onclick: () => {
+        preserveTaskPanelScroll();
         if (state.openTasks.has(taskName)) state.openTasks.delete(taskName);
         else state.openTasks.add(taskName);
         renderPanel();
@@ -577,8 +672,10 @@ function renderTaskDescriptionPanel(panel) {
     const toggleButton = el("button", {
       class: "task-eye",
       text: "toggle",
+      onmousedown: (event) => event.preventDefault(),
       onclick: (event) => {
         event.stopPropagation();
+        preserveTaskPanelScroll();
         const nextOn = visibleCount !== taskSeqs.length;
         for (const seq of taskSeqs) {
           if (nextOn) state.visibleSeqs.add(seq.seq_id);
@@ -593,7 +690,9 @@ function renderTaskDescriptionPanel(panel) {
       descList.appendChild(el("button", {
         class: `desc-toggle${visible ? " active" : " inactive"}`,
         text: seq.description,
+        onmousedown: (event) => event.preventDefault(),
         onclick: () => {
+          preserveTaskPanelScroll();
           if (state.visibleSeqs.has(seq.seq_id)) state.visibleSeqs.delete(seq.seq_id);
           else state.visibleSeqs.add(seq.seq_id);
           renderViewer();
