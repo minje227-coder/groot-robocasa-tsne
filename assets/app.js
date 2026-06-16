@@ -5,8 +5,8 @@ const state = {
   runManifest: null,
   sequences: null,
   pointsByFeature: new Map(),
-  feature: null,
-  preferredFeature: null,
+  selectedFeatures: [],
+  preferredFeatures: [],
   cam: "robot0_agentview_left",
   selected: null,
   visibleSeqs: new Set(),
@@ -14,10 +14,8 @@ const state = {
   lastHash: "",
   syncingVideos: false,
   panelWidth: 360,
-  chartZoom: 1,
   panMode: false,
-  chartCenter: null,
-  chartBaseView: null,
+  chartStates: new Map(),
   pendingPanelScrollTop: null,
   pendingTaskPanelScrollTop: null,
 };
@@ -90,6 +88,8 @@ async function applyHash() {
     state.runManifest = null;
     state.sequences = null;
     state.pointsByFeature.clear();
+    state.selectedFeatures = [];
+    state.chartStates.clear();
     state.selected = null;
     state.visibleSeqs = new Set();
     state.openTasks = new Set();
@@ -227,10 +227,8 @@ function renderEmpty() {
 async function loadRun(run, options = {}) {
   state.run = run;
   state.pointsByFeature.clear();
+  state.chartStates.clear();
   state.selected = null;
-  state.chartZoom = 1;
-  state.chartCenter = null;
-  state.chartBaseView = null;
   renderSidebar();
   document.querySelector(".stage").innerHTML = `<div class="chart-wrap"><p class="status">Loading ${run.label || run.id}...</p></div>`;
   document.querySelector(".panel").innerHTML = "";
@@ -239,15 +237,15 @@ async function loadRun(run, options = {}) {
   state.sequences = await fetchJson(`${base}${state.runManifest.sequences_file}`);
   state.visibleSeqs = new Set(state.sequences.sequences.map((seq) => seq.seq_id));
   state.openTasks = new Set();
-  const preferred = state.preferredFeature;
-  state.feature = state.runManifest.features.includes(preferred)
-    ? preferred
-    : state.runManifest.features[0];
-  state.preferredFeature = state.feature;
+  const preferred = state.preferredFeatures.filter((feature) =>
+    state.runManifest.features.includes(feature)
+  );
+  state.selectedFeatures = preferred.length ? preferred : [state.runManifest.features[0]];
+  state.preferredFeatures = [...state.selectedFeatures];
   if (options.updateHash !== false) {
     location.hash = `family=${encodeURIComponent(run.family)}&run=${encodeURIComponent(run.id)}`;
   }
-  await loadFeature(state.feature);
+  await Promise.all(state.selectedFeatures.map((feature) => loadFeature(feature)));
   renderViewer();
 }
 
@@ -257,25 +255,22 @@ async function loadFeature(feature) {
     const file = state.runManifest.points_files[feature];
     state.pointsByFeature.set(feature, await fetchJson(`${base}${file}`));
   }
-  state.feature = feature;
-  state.preferredFeature = feature;
   ensureSelectedPoint();
 }
 
 function renderViewer() {
   renderTabs();
-  renderChart();
+  renderCharts();
   renderPanel();
 }
 
 function ensureSelectedPoint() {
   if (state.selected) return;
-  const pointPayload = state.pointsByFeature.get(state.feature);
+  const feature = state.selectedFeatures[0];
+  const pointPayload = state.pointsByFeature.get(feature);
   if (!pointPayload || !pointPayload.points?.length) return;
   const first = pointPayload.points[0];
   state.selected = {
-    x: first[0],
-    y: first[1],
     seq: first[2],
     anchor: first[3],
     frame: first[4],
@@ -291,7 +286,7 @@ function renderTabs() {
       onclick: () => {
         state.panMode = !state.panMode;
         renderTabs();
-        renderChart();
+        renderCharts();
       },
       title: "Toggle drag pan",
     }),
@@ -299,18 +294,16 @@ function renderTabs() {
       class: "mini-btn zoom-btn",
       text: "-",
       onclick: () => {
-        state.chartZoom = Math.max(0.25, state.chartZoom / 1.25);
-        updateChartViewBox();
+        scaleSelectedCharts(1 / 1.25);
       },
       title: "Zoom out",
     }),
-    el("span", { class: "zoom-readout", text: `${state.chartZoom.toFixed(2)}x` }),
+    el("span", { class: "zoom-readout", text: getZoomReadout() }),
     el("button", {
       class: "mini-btn zoom-btn",
       text: "+",
       onclick: () => {
-        state.chartZoom = Math.min(8, state.chartZoom * 1.25);
-        updateChartViewBox();
+        scaleSelectedCharts(1.25);
       },
       title: "Zoom in",
     }),
@@ -318,10 +311,10 @@ function renderTabs() {
   const tabs = el("div", { class: "tabs" },
     state.runManifest.features.map((feature) =>
       el("button", {
-        class: `tab-btn${feature === state.feature ? " active" : ""}`,
+        class: `tab-btn${state.selectedFeatures.includes(feature) ? " active" : ""}`,
         text: feature,
         onclick: async () => {
-          await loadFeature(feature);
+          await toggleFeature(feature);
           renderViewer();
         },
       })
@@ -331,7 +324,51 @@ function renderTabs() {
   document.querySelector(".stage").innerHTML = "";
   renderVideoStrip(document.querySelector(".stage"));
   document.querySelector(".stage").appendChild(toolbar);
-  document.querySelector(".stage").appendChild(el("div", { class: "chart-wrap" }));
+  document.querySelector(".stage").appendChild(el("div", { class: "chart-grid" }));
+}
+
+async function toggleFeature(feature) {
+  const isSelected = state.selectedFeatures.includes(feature);
+  if (isSelected && state.selectedFeatures.length === 1) return;
+  if (isSelected) {
+    state.selectedFeatures = state.selectedFeatures.filter((item) => item !== feature);
+  } else {
+    await loadFeature(feature);
+    state.selectedFeatures = state.runManifest.features.filter((item) =>
+      [...state.selectedFeatures, feature].includes(item)
+    );
+  }
+  state.preferredFeatures = [...state.selectedFeatures];
+}
+
+function getChartState(feature) {
+  if (!state.chartStates.has(feature)) {
+    state.chartStates.set(feature, {
+      zoom: 1,
+      center: null,
+      baseView: null,
+    });
+  }
+  return state.chartStates.get(feature);
+}
+
+function getZoomReadout() {
+  if (!state.selectedFeatures.length) return "1.00x";
+  const values = state.selectedFeatures.map((feature) => getChartState(feature).zoom);
+  const first = values[0];
+  return values.every((value) => Math.abs(value - first) < 1e-9)
+    ? `${first.toFixed(2)}x`
+    : "multi";
+}
+
+function scaleSelectedCharts(factor) {
+  for (const feature of state.selectedFeatures) {
+    const chartState = getChartState(feature);
+    chartState.zoom = Math.min(8, Math.max(0.25, chartState.zoom * factor));
+    updateChartViewBox(feature);
+  }
+  const readout = document.querySelector(".zoom-readout");
+  if (readout) readout.textContent = getZoomReadout();
 }
 
 function renderVideoStrip(stage) {
@@ -398,9 +435,28 @@ function syncVideosFrom(source, options = {}) {
   syncSelectionToVideo(source);
 }
 
-function renderChart() {
-  const wrap = document.querySelector(".chart-wrap");
-  const pointPayload = state.pointsByFeature.get(state.feature);
+function renderCharts() {
+  const grid = document.querySelector(".chart-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  grid.className = `chart-grid chart-count-${Math.min(state.selectedFeatures.length, 3)}`;
+  for (const feature of state.selectedFeatures) {
+    const card = el("section", { class: "chart-card", "data-feature": feature }, [
+      el("div", { class: "chart-card-head" }, [
+        el("span", { class: "chart-card-title", text: feature }),
+      ]),
+      el("div", { class: "chart-wrap", "data-feature": feature }),
+    ]);
+    grid.appendChild(card);
+    renderChart(feature);
+  }
+}
+
+function renderChart(feature) {
+  const wrap = document.querySelector(`.chart-wrap[data-feature="${feature}"]`);
+  const chartState = getChartState(feature);
+  const pointPayload = state.pointsByFeature.get(feature);
+  if (!wrap || !pointPayload) return;
   const allPoints = pointPayload.points.map((row) => ({
     x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
   }));
@@ -422,8 +478,9 @@ function renderChart() {
   const baseY = minY - padY;
   const baseWidth = (maxX - minX) + 2 * padX;
   const baseHeight = (maxY - minY) + 2 * padY;
-  state.chartBaseView = { baseX, baseY, baseWidth, baseHeight };
+  chartState.baseView = { baseX, baseY, baseWidth, baseHeight };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.dataset.feature = feature;
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   bg.setAttribute("class", "chart-pan-surface");
@@ -472,7 +529,8 @@ function renderChart() {
     c.dataset.frame = String(point.frame);
     c.addEventListener("click", () => {
       state.selected = point;
-      renderViewer();
+      renderCharts();
+      renderPanel();
     });
     c.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"))
       .textContent = `${seq.task_name}\n${seq.description}\nframe ${point.frame}`;
@@ -481,47 +539,50 @@ function renderChart() {
   wrap.innerHTML = "";
   wrap.classList.toggle("pan-enabled", state.panMode);
   wrap.appendChild(svg);
-  attachChartPan(svg);
-  updateChartViewBox();
+  attachChartPan(svg, feature);
+  updateChartViewBox(feature);
 }
 
-function getChartCenter() {
-  if (!state.chartBaseView) return { x: 0, y: 0 };
-  if (state.chartCenter) return state.chartCenter;
+function getChartCenter(feature) {
+  const chartState = getChartState(feature);
+  if (!chartState.baseView) return { x: 0, y: 0 };
+  if (chartState.center) return chartState.center;
   return {
-    x: state.chartBaseView.baseX + (state.chartBaseView.baseWidth / 2),
-    y: state.chartBaseView.baseY + (state.chartBaseView.baseHeight / 2),
+    x: chartState.baseView.baseX + (chartState.baseView.baseWidth / 2),
+    y: chartState.baseView.baseY + (chartState.baseView.baseHeight / 2),
   };
 }
 
-function updateChartViewBox() {
-  const svg = document.querySelector(".chart-wrap svg");
-  if (!svg || !state.chartBaseView) return;
-  const { baseWidth, baseHeight } = state.chartBaseView;
-  const center = getChartCenter();
-  const zoomWidth = baseWidth / state.chartZoom;
-  const zoomHeight = baseHeight / state.chartZoom;
+function updateChartViewBox(feature) {
+  const svg = document.querySelector(`.chart-wrap[data-feature="${feature}"] svg`);
+  const chartState = getChartState(feature);
+  if (!svg || !chartState.baseView) return;
+  const { baseWidth, baseHeight } = chartState.baseView;
+  const center = getChartCenter(feature);
+  const zoomWidth = baseWidth / chartState.zoom;
+  const zoomHeight = baseHeight / chartState.zoom;
   svg.setAttribute(
     "viewBox",
     `${center.x - (zoomWidth / 2)} ${center.y - (zoomHeight / 2)} ${zoomWidth} ${zoomHeight}`
   );
   const readout = document.querySelector(".zoom-readout");
-  if (readout) readout.textContent = `${state.chartZoom.toFixed(2)}x`;
+  if (readout) readout.textContent = getZoomReadout();
 }
 
-function zoomChartAt(clientX, clientY, direction) {
-  const svg = document.querySelector(".chart-wrap svg");
-  if (!svg || !state.chartBaseView) return;
+function zoomChartAt(feature, clientX, clientY, direction) {
+  const svg = document.querySelector(`.chart-wrap[data-feature="${feature}"] svg`);
+  const chartState = getChartState(feature);
+  if (!svg || !chartState.baseView) return;
   const bounds = svg.getBoundingClientRect();
   if (!bounds.width || !bounds.height) return;
 
   const factor = direction < 0 ? 1.2 : (1 / 1.2);
-  const nextZoom = Math.min(8, Math.max(0.25, state.chartZoom * factor));
-  if (nextZoom === state.chartZoom) return;
+  const nextZoom = Math.min(8, Math.max(0.25, chartState.zoom * factor));
+  if (nextZoom === chartState.zoom) return;
 
-  const currentCenter = getChartCenter();
-  const currentWidth = state.chartBaseView.baseWidth / state.chartZoom;
-  const currentHeight = state.chartBaseView.baseHeight / state.chartZoom;
+  const currentCenter = getChartCenter(feature);
+  const currentWidth = chartState.baseView.baseWidth / chartState.zoom;
+  const currentHeight = chartState.baseView.baseHeight / chartState.zoom;
   const currentLeft = currentCenter.x - (currentWidth / 2);
   const currentTop = currentCenter.y - (currentHeight / 2);
   const fracX = (clientX - bounds.left) / bounds.width;
@@ -529,51 +590,52 @@ function zoomChartAt(clientX, clientY, direction) {
   const worldX = currentLeft + (fracX * currentWidth);
   const worldY = currentTop + (fracY * currentHeight);
 
-  state.chartZoom = nextZoom;
-  const nextWidth = state.chartBaseView.baseWidth / state.chartZoom;
-  const nextHeight = state.chartBaseView.baseHeight / state.chartZoom;
-  state.chartCenter = {
+  chartState.zoom = nextZoom;
+  const nextWidth = chartState.baseView.baseWidth / chartState.zoom;
+  const nextHeight = chartState.baseView.baseHeight / chartState.zoom;
+  chartState.center = {
     x: worldX - (fracX * nextWidth) + (nextWidth / 2),
     y: worldY - (fracY * nextHeight) + (nextHeight / 2),
   };
-  updateChartViewBox();
+  updateChartViewBox(feature);
 }
 
-function attachChartPan(svg) {
+function attachChartPan(svg, feature) {
   const surface = svg.querySelector(".chart-pan-surface");
   if (!surface) return;
   svg.addEventListener("wheel", (event) => {
     event.preventDefault();
-    zoomChartAt(event.clientX, event.clientY, event.deltaY);
+    zoomChartAt(feature, event.clientX, event.clientY, event.deltaY);
   }, { passive: false });
-  surface.addEventListener("pointerdown", (event) => {
+  svg.addEventListener("pointerdown", (event) => {
     const allowLeftPan = event.button === 0 && state.panMode;
     const allowMiddlePan = event.button === 1;
-    if (!state.chartBaseView || (!allowLeftPan && !allowMiddlePan)) return;
+    const chartState = getChartState(feature);
+    if (!chartState.baseView || (!allowLeftPan && !allowMiddlePan)) return;
     event.preventDefault();
-    surface.setPointerCapture(event.pointerId);
+    svg.setPointerCapture(event.pointerId);
     svg.classList.add("panning");
     const bounds = svg.getBoundingClientRect();
-    const startCenter = getChartCenter();
-    const zoomWidth = state.chartBaseView.baseWidth / state.chartZoom;
-    const zoomHeight = state.chartBaseView.baseHeight / state.chartZoom;
+    const startCenter = getChartCenter(feature);
+    const zoomWidth = chartState.baseView.baseWidth / chartState.zoom;
+    const zoomHeight = chartState.baseView.baseHeight / chartState.zoom;
 
     const onMove = (moveEvent) => {
       const dx = ((moveEvent.clientX - event.clientX) / bounds.width) * zoomWidth;
       const dy = ((moveEvent.clientY - event.clientY) / bounds.height) * zoomHeight;
-      state.chartCenter = { x: startCenter.x - dx, y: startCenter.y - dy };
-      updateChartViewBox();
+      chartState.center = { x: startCenter.x - dx, y: startCenter.y - dy };
+      updateChartViewBox(feature);
     };
     const onUp = () => {
       svg.classList.remove("panning");
-      surface.removeEventListener("pointermove", onMove);
-      surface.removeEventListener("pointerup", onUp);
-      surface.removeEventListener("pointercancel", onUp);
+      svg.removeEventListener("pointermove", onMove);
+      svg.removeEventListener("pointerup", onUp);
+      svg.removeEventListener("pointercancel", onUp);
     };
 
-    surface.addEventListener("pointermove", onMove);
-    surface.addEventListener("pointerup", onUp);
-    surface.addEventListener("pointercancel", onUp);
+    svg.addEventListener("pointermove", onMove);
+    svg.addEventListener("pointerup", onUp);
+    svg.addEventListener("pointercancel", onUp);
   });
 }
 
@@ -585,7 +647,8 @@ function isSelected(point) {
 }
 
 function getCurrentFeaturePoints() {
-  const pointPayload = state.pointsByFeature.get(state.feature);
+  const feature = state.selectedFeatures[0];
+  const pointPayload = state.pointsByFeature.get(feature);
   if (!pointPayload) return [];
   return pointPayload.points.map((row) => ({
     x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
@@ -618,17 +681,7 @@ function syncSelectionToVideo(video) {
 }
 
 function updateSelectedMarker() {
-  renderChart();
-  for (const dot of document.querySelectorAll("circle.dot")) {
-    const selected = state.selected
-      && Number(dot.dataset.seq) === state.selected.seq
-      && Number(dot.dataset.anchor) === state.selected.anchor
-      && Number(dot.dataset.frame) === state.selected.frame;
-    dot.classList.toggle("selected", Boolean(selected));
-    if (dot.dataset.seq) {
-      dot.setAttribute("r", selected ? "0.54" : "0.55");
-    }
-  }
+  renderCharts();
 }
 
 function updateSelectionFrame() {
@@ -660,7 +713,7 @@ function renderPanel() {
   panel.appendChild(el("div", { class: "info" }, [
     definitionList([
       ["Run", state.runManifest.label || state.runManifest.run_id],
-      ["Feature", state.feature],
+      ["Feature", state.selectedFeatures.join(", ")],
       ["Task", seq.task_name],
       ["Description", seq.description],
       ["Episode", String(seq.episode_index)],
