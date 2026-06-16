@@ -148,38 +148,6 @@ body.resizing-panel {
   gap: 8px;
 }
 
-.run-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.run-item .run-btn {
-  min-width: 0;
-}
-
-.run-off-btn {
-  border: 1px solid var(--line);
-  background: #fff5f5;
-  color: #9f1239;
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.run-off-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.run-off-btn:not(:disabled):hover {
-  border-color: #fda4af;
-  background: #ffe4e6;
-}
-
 .sidebar-help {
   margin-top: 18px;
   padding-top: 12px;
@@ -318,8 +286,8 @@ body.resizing-panel {
 
 .chart-off-btn {
   border: 1px solid var(--line);
-  background: #fff5f5;
-  color: #9f1239;
+  background: var(--panel);
+  color: var(--ink);
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 11px;
@@ -329,8 +297,8 @@ body.resizing-panel {
 }
 
 .chart-off-btn:hover {
-  border-color: #fda4af;
-  background: #ffe4e6;
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .chart-grid.chart-count-2 .chart-wrap,

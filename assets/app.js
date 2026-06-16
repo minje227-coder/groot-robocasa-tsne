@@ -217,24 +217,12 @@ function renderSidebar() {
   const runs = (state.catalog.runs || []).filter((run) => run.family === state.family);
   const runButtons = runs.map((run) => {
     const isShown = state.selectedCharts.some((chart) => chart.runId === run.id);
-    return el("div", { class: "run-item" }, [
-      el("button", {
-        class: `run-btn${state.activeRunId === run.id ? " active" : ""}${isShown ? " selected" : ""}`,
-        onclick: () => loadRun(run),
-      }, [
-        el("strong", { text: run.label || run.id }),
-        el("span", { text: (run.features || []).join(" / ") }),
-      ]),
-      el("button", {
-        class: "run-off-btn",
-        text: "Off",
-        disabled: isShown ? null : "",
-        title: isShown ? `Hide all charts for ${run.label || run.id}` : "No charts shown for this run",
-        onclick: (event) => {
-          event.stopPropagation();
-          removeRunCharts(run.id);
-        },
-      }),
+    return el("button", {
+      class: `run-btn${state.activeRunId === run.id ? " active" : ""}${isShown ? " selected" : ""}`,
+      onclick: () => loadRun(run),
+    }, [
+      el("strong", { text: run.label || run.id }),
+      el("span", { text: (run.features || []).join(" / ") }),
     ]);
   });
 
