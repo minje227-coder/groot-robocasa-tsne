@@ -12,6 +12,8 @@ const state = {
   openTasks: new Set(),
   lastHash: "",
   syncingVideos: false,
+  panelWidth: 360,
+  chartZoom: 1,
 };
 
 const familyLabels = {
@@ -48,6 +50,7 @@ async function fetchJson(path) {
 
 async function init() {
   renderShell();
+  attachPanelResize();
   try {
     state.catalog = await fetchJson("./data/catalog.json");
     await applyHash();
@@ -106,10 +109,68 @@ function renderShell() {
           el("div", { class: "status", text: "Select a run." }),
         ]),
       ]),
+      el("div", {
+        class: "panel-resizer",
+        role: "separator",
+        "aria-orientation": "vertical",
+        "aria-label": "Resize details panel",
+        tabindex: "0",
+      }),
       el("aside", { class: "panel" }),
     ]),
   ]);
   document.getElementById("app").appendChild(shell);
+  applyPanelWidth();
+}
+
+function applyPanelWidth() {
+  const layout = document.querySelector(".layout");
+  if (!layout) return;
+  layout.style.setProperty("--panel-width", `${state.panelWidth}px`);
+}
+
+function attachPanelResize() {
+  const layout = document.querySelector(".layout");
+  const handle = document.querySelector(".panel-resizer");
+  if (!layout || !handle) return;
+
+  const minWidth = 300;
+  const maxWidth = 720;
+
+  const updateWidthFromClientX = (clientX) => {
+    const bounds = layout.getBoundingClientRect();
+    const next = Math.min(maxWidth, Math.max(minWidth, bounds.right - clientX));
+    state.panelWidth = next;
+    applyPanelWidth();
+  };
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (window.innerWidth <= 1100) return;
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add("resizing-panel");
+
+    const onMove = (moveEvent) => updateWidthFromClientX(moveEvent.clientX);
+    const onUp = () => {
+      document.body.classList.remove("resizing-panel");
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+    };
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  });
+
+  handle.addEventListener("keydown", (event) => {
+    if (window.innerWidth <= 1100) return;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowLeft" ? 24 : -24;
+    state.panelWidth = Math.min(maxWidth, Math.max(minWidth, state.panelWidth + delta));
+    applyPanelWidth();
+  });
 }
 
 function renderSidebar() {
@@ -157,6 +218,7 @@ async function loadRun(run, options = {}) {
   state.run = run;
   state.pointsByFeature.clear();
   state.selected = null;
+  state.chartZoom = 1;
   renderSidebar();
   document.querySelector(".stage").innerHTML = `<div class="chart-wrap"><p class="status">Loading ${run.label || run.id}...</p></div>`;
   document.querySelector(".panel").innerHTML = "";
@@ -189,6 +251,27 @@ function renderViewer() {
 }
 
 function renderTabs() {
+  const zoomControls = el("div", { class: "zoom-controls" }, [
+    el("button", {
+      class: "mini-btn zoom-btn",
+      text: "-",
+      onclick: () => {
+        state.chartZoom = Math.max(1, state.chartZoom / 1.25);
+        renderChart();
+      },
+      title: "Zoom out",
+    }),
+    el("span", { class: "zoom-readout", text: `${state.chartZoom.toFixed(2)}x` }),
+    el("button", {
+      class: "mini-btn zoom-btn",
+      text: "+",
+      onclick: () => {
+        state.chartZoom = Math.min(8, state.chartZoom * 1.25);
+        renderChart();
+      },
+      title: "Zoom in",
+    }),
+  ]);
   const tabs = el("div", { class: "tabs" },
     state.runManifest.features.map((feature) =>
       el("button", {
@@ -201,9 +284,10 @@ function renderTabs() {
       })
     )
   );
+  const toolbar = el("div", { class: "stage-toolbar" }, [tabs, zoomControls]);
   document.querySelector(".stage").innerHTML = "";
   renderVideoStrip(document.querySelector(".stage"));
-  document.querySelector(".stage").appendChild(tabs);
+  document.querySelector(".stage").appendChild(toolbar);
   document.querySelector(".stage").appendChild(el("div", { class: "chart-wrap" }));
 }
 
@@ -291,7 +375,15 @@ function renderChart() {
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   const padX = (maxX - minX || 1) * 0.08;
   const padY = (maxY - minY || 1) * 0.08;
-  const viewBox = `${minX - padX} ${minY - padY} ${(maxX - minX) + 2 * padX} ${(maxY - minY) + 2 * padY}`;
+  const baseX = minX - padX;
+  const baseY = minY - padY;
+  const baseWidth = (maxX - minX) + 2 * padX;
+  const baseHeight = (maxY - minY) + 2 * padY;
+  const centerX = state.selected ? state.selected.x : baseX + (baseWidth / 2);
+  const centerY = state.selected ? state.selected.y : baseY + (baseHeight / 2);
+  const zoomWidth = baseWidth / state.chartZoom;
+  const zoomHeight = baseHeight / state.chartZoom;
+  const viewBox = `${centerX - (zoomWidth / 2)} ${centerY - (zoomHeight / 2)} ${zoomWidth} ${zoomHeight}`;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", viewBox);
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
@@ -342,6 +434,8 @@ function renderChart() {
   }
   wrap.innerHTML = "";
   wrap.appendChild(svg);
+  const readout = document.querySelector(".zoom-readout");
+  if (readout) readout.textContent = `${state.chartZoom.toFixed(2)}x`;
 }
 
 function isSelected(point) {
