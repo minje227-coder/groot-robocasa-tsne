@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "families": [
+    "baseline",
+    "MGD",
+    "RKD"
+  ],
+  "runs": [
+    {
+      "id": "baseline_checkpoint_120000",
+      "family": "baseline",
+      "label": "baseline_120K",
+      "path": "runs/baseline_checkpoint_120000",
+      "manifest_id": "86c0caa8be",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "baseline_checkpoint_60000",
+      "family": "baseline",
+      "label": "baseline_60K",
+      "path": "runs/baseline_checkpoint_60000",
+      "manifest_id": "86c0caa8be",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "mgd_seed44_phase2",
+      "family": "MGD",
+      "label": "MGD_seed44_phase2",
+      "path": "runs/mgd_seed44_phase2",
+      "manifest_id": "86c0caa8be",
+      "features": [
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "mgd_seed44_phase3",
+      "family": "MGD",
+      "label": "MGD_seed44_phase3",
+      "path": "runs/mgd_seed44_phase3",
+      "manifest_id": "86c0caa8be",
+      "features": [
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "rkd_v2a_phase2",
+      "family": "RKD",
+      "label": "RKD_v2A_phase2",
+      "path": "runs/rkd_v2a_phase2",
+      "manifest_id": "86c0caa8be",
+      "features": [
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "rkd_v2a_phase3",
+      "family": "RKD",
+      "label": "RKD_v2A_phase3",
+      "path": "runs/rkd_v2a_phase3",
+      "manifest_id": "86c0caa8be",
+      "features": [
+        "processed",
+        "action"
+      ]
+    }
+  ]
+}

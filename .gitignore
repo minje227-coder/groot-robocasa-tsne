@@ -1,7 +1,10 @@
 *.npz
 **/*.npz
-*.mp4
-**/*.mp4
+logs/
+data/.catalog.lock
+baseline/**/clips/
+MGD/**/clips/
+RKD/**/clips/
 __pycache__/
 *.pyc
 .DS_Store

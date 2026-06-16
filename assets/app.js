@@ -1,0 +1,314 @@
+const state = {
+  catalog: null,
+  family: "baseline",
+  run: null,
+  runManifest: null,
+  sequences: null,
+  pointsByFeature: new Map(),
+  feature: null,
+  cam: "robot0_agentview_left",
+  selected: null,
+  lastHash: "",
+};
+
+const familyLabels = {
+  baseline: "baseline",
+  MGD: "MGD",
+  RKD: "RKD",
+};
+
+const colors = [
+  "#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2",
+  "#be123c", "#4f46e5", "#65a30d", "#c026d3", "#0f766e", "#b45309",
+  "#1d4ed8", "#b91c1c", "#15803d", "#7c3aed", "#d97706", "#0e7490",
+  "#9f1239", "#4338ca", "#4d7c0f", "#a21caf", "#115e59", "#92400e",
+  "#0369a1", "#a16207"
+];
+
+function el(tag, attrs = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value);
+  }
+  for (const child of children) node.appendChild(child);
+  return node;
+}
+
+async function fetchJson(path) {
+  const res = await fetch(path, { cache: "no-cache" });
+  if (!res.ok) throw new Error(`${res.status} ${path}`);
+  return res.json();
+}
+
+async function init() {
+  renderShell();
+  try {
+    state.catalog = await fetchJson("./data/catalog.json");
+    await applyHash();
+    window.addEventListener("hashchange", applyHash);
+    window.setInterval(() => {
+      if (location.hash !== state.lastHash) applyHash();
+    }, 150);
+  } catch (err) {
+    document.querySelector(".stage").innerHTML = `<p class="status error">${err.message}</p>`;
+  }
+}
+
+async function applyHash() {
+  if (!state.catalog) return;
+  state.lastHash = location.hash;
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const family = hash.get("family") || "baseline";
+  const runId = hash.get("run");
+  state.family = family;
+  renderSidebar();
+  if (runId) {
+    const run = state.catalog.runs.find((r) => r.id === runId);
+    if (run && (!state.run || state.run.id !== run.id)) {
+      state.family = run.family;
+      await loadRun(run, { updateHash: false });
+      return;
+    }
+  }
+  if (!runId) {
+    state.run = null;
+    state.runManifest = null;
+    state.sequences = null;
+    state.pointsByFeature.clear();
+    state.selected = null;
+    renderSidebar();
+    renderEmpty();
+  }
+}
+
+function renderShell() {
+  document.getElementById("app").innerHTML = "";
+  const shell = el("div", { class: "shell" }, [
+    el("header", { class: "topbar" }, [
+      el("div", { class: "title" }, [
+        el("h1", { text: "RoboCasa temporal t-SNE" }),
+        el("p", { text: "Shared viewer for baseline, MGD, and RKD trajectory embeddings." }),
+      ]),
+      el("a", { href: "https://github.com/minje227-coder/groot-robocasa-tsne", text: "GitHub" }),
+    ]),
+    el("main", { class: "layout" }, [
+      el("aside", { class: "sidebar" }),
+      el("section", { class: "stage" }, [
+        el("div", { class: "chart-wrap" }, [
+          el("div", { class: "status", text: "Select a run." }),
+        ]),
+      ]),
+      el("aside", { class: "panel" }),
+    ]),
+  ]);
+  document.getElementById("app").appendChild(shell);
+}
+
+function renderSidebar() {
+  const sidebar = document.querySelector(".sidebar");
+  const families = state.catalog.families || ["baseline", "MGD", "RKD"];
+  const familyButtons = families.map((family) =>
+    el("button", {
+      class: `family-btn${family === state.family ? " active" : ""}`,
+      text: familyLabels[family] || family,
+      onclick: () => {
+        state.family = family;
+        state.run = null;
+        location.hash = `family=${encodeURIComponent(family)}`;
+        renderSidebar();
+        renderEmpty();
+      },
+    })
+  );
+  const runs = (state.catalog.runs || []).filter((run) => run.family === state.family);
+  const runButtons = runs.map((run) =>
+    el("button", {
+      class: `run-btn${state.run && state.run.id === run.id ? " active" : ""}`,
+      onclick: () => loadRun(run),
+    }, [
+      el("strong", { text: run.label || run.id }),
+      el("span", { text: (run.features || []).join(" / ") }),
+    ])
+  );
+
+  sidebar.innerHTML = "";
+  sidebar.appendChild(el("h2", { text: "Family" }));
+  sidebar.appendChild(el("div", { class: "family-grid" }, familyButtons));
+  sidebar.appendChild(el("h2", { text: "Runs" }));
+  sidebar.appendChild(el("div", { class: "run-list" }, runButtons.length ? runButtons : [
+    el("p", { class: "status", text: "No runs published yet." }),
+  ]));
+}
+
+function renderEmpty() {
+  document.querySelector(".stage").innerHTML = `<div class="chart-wrap"><p class="status">Select a run.</p></div>`;
+  document.querySelector(".panel").innerHTML = "";
+}
+
+async function loadRun(run, options = {}) {
+  state.run = run;
+  state.pointsByFeature.clear();
+  state.selected = null;
+  renderSidebar();
+  document.querySelector(".stage").innerHTML = `<div class="chart-wrap"><p class="status">Loading ${run.label || run.id}...</p></div>`;
+  document.querySelector(".panel").innerHTML = "";
+  const base = `./${run.path}/`;
+  state.runManifest = await fetchJson(`${base}manifest.json`);
+  state.sequences = await fetchJson(`${base}${state.runManifest.sequences_file}`);
+  state.feature = state.runManifest.features[0];
+  if (options.updateHash !== false) {
+    location.hash = `family=${encodeURIComponent(run.family)}&run=${encodeURIComponent(run.id)}`;
+  }
+  await loadFeature(state.feature);
+  renderViewer();
+}
+
+async function loadFeature(feature) {
+  if (!state.pointsByFeature.has(feature)) {
+    const base = `./${state.run.path}/`;
+    const file = state.runManifest.points_files[feature];
+    state.pointsByFeature.set(feature, await fetchJson(`${base}${file}`));
+  }
+  state.feature = feature;
+}
+
+function renderViewer() {
+  renderTabs();
+  renderChart();
+  renderPanel();
+}
+
+function renderTabs() {
+  const tabs = el("div", { class: "tabs" },
+    state.runManifest.features.map((feature) =>
+      el("button", {
+        class: `tab-btn${feature === state.feature ? " active" : ""}`,
+        text: feature,
+        onclick: async () => {
+          await loadFeature(feature);
+          renderViewer();
+        },
+      })
+    )
+  );
+  document.querySelector(".stage").innerHTML = "";
+  document.querySelector(".stage").appendChild(tabs);
+  document.querySelector(".stage").appendChild(el("div", { class: "chart-wrap" }));
+}
+
+function renderChart() {
+  const wrap = document.querySelector(".chart-wrap");
+  const pointPayload = state.pointsByFeature.get(state.feature);
+  const points = pointPayload.points.map((row) => ({
+    x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
+  }));
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const padX = (maxX - minX || 1) * 0.08;
+  const padY = (maxY - minY || 1) * 0.08;
+  const viewBox = `${minX - padX} ${minY - padY} ${(maxX - minX) + 2 * padX} ${(maxY - minY) + 2 * padY}`;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", viewBox);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+  const bySeq = new Map();
+  for (const point of points) {
+    if (!bySeq.has(point.seq)) bySeq.set(point.seq, []);
+    bySeq.get(point.seq).push(point);
+  }
+  for (const [seqId, seqPoints] of bySeq) {
+    seqPoints.sort((a, b) => a.anchor - b.anchor);
+    const seq = state.sequences.sequences[seqId];
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const d = seqPoints.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ");
+    path.setAttribute("d", d);
+    path.setAttribute("class", "path-line");
+    path.setAttribute("stroke", colors[seq.task_id % colors.length]);
+    svg.appendChild(path);
+  }
+  for (const point of points) {
+    const seq = state.sequences.sequences[point.seq];
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", point.x);
+    c.setAttribute("cy", point.y);
+    c.setAttribute("r", isSelected(point) ? 0.95 : 0.55);
+    c.setAttribute("class", `dot${isSelected(point) ? " selected" : ""}`);
+    c.setAttribute("fill", colors[seq.task_id % colors.length]);
+    c.addEventListener("click", () => {
+      state.selected = point;
+      renderViewer();
+    });
+    c.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"))
+      .textContent = `${seq.task_name}\n${seq.description}\nframe ${point.frame}`;
+    svg.appendChild(c);
+  }
+  wrap.innerHTML = "";
+  wrap.appendChild(svg);
+}
+
+function isSelected(point) {
+  return state.selected
+    && state.selected.seq === point.seq
+    && state.selected.anchor === point.anchor
+    && state.selected.frame === point.frame;
+}
+
+function renderPanel() {
+  const panel = document.querySelector(".panel");
+  const seq = state.selected ? state.sequences.sequences[state.selected.seq] : null;
+  panel.innerHTML = "";
+  panel.appendChild(el("h2", { text: "Selection" }));
+  if (!seq) {
+    panel.appendChild(el("p", { class: "status", text: "Click a trajectory point." }));
+    return;
+  }
+  const cams = Object.keys(seq.videos || {});
+  if (cams.length && !cams.includes(state.cam)) state.cam = cams[0];
+  panel.appendChild(el("div", { class: "info" }, [
+    definitionList([
+      ["Run", state.runManifest.label || state.runManifest.run_id],
+      ["Feature", state.feature],
+      ["Task", seq.task_name],
+      ["Description", seq.description],
+      ["Episode", String(seq.episode_index)],
+      ["Frame", String(state.selected.frame)],
+    ]),
+  ]));
+  if (cams.length) {
+    panel.appendChild(el("div", { class: "cams" }, cams.map((cam) =>
+      el("button", {
+        class: `cam-btn${cam === state.cam ? " active" : ""}`,
+        text: cam.replace("robot0_", ""),
+        onclick: () => {
+          state.cam = cam;
+          renderPanel();
+        },
+      })
+    )));
+    const video = el("video", { controls: "controls", src: `./${seq.videos[state.cam]}` });
+    video.addEventListener("loadedmetadata", () => {
+      video.currentTime = Math.max(0, state.selected.frame / (state.runManifest.fps || 20));
+    });
+    panel.appendChild(video);
+  } else {
+    panel.appendChild(el("p", { class: "status", text: "No video available for this sequence." }));
+  }
+}
+
+function definitionList(rows) {
+  const dl = el("dl");
+  for (const [k, v] of rows) {
+    dl.appendChild(el("div", {}, [
+      el("dt", { text: k }),
+      el("dd", { text: v }),
+    ]));
+  }
+  return dl;
+}
+
+init();

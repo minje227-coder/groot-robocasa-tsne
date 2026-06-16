@@ -4,83 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RoboCasa t-SNE</title>
-  <style>
-    :root {
-      color-scheme: light;
-      --bg: #f4f6f8;
-      --panel: #ffffff;
-      --text: #18212b;
-      --muted: #5d6b79;
-      --line: #d7dde3;
-      --accent: #0f6cbd;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
-    main {
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 40px 20px 56px;
-    }
-    h1 {
-      margin: 0 0 8px;
-      font-size: 32px;
-    }
-    p {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.5;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-      margin-top: 28px;
-    }
-    .card {
-      display: block;
-      padding: 18px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-      color: inherit;
-      text-decoration: none;
-    }
-    .card:hover {
-      border-color: var(--accent);
-    }
-    .card h2 {
-      margin: 0 0 8px;
-      font-size: 20px;
-    }
-    .card span {
-      color: var(--muted);
-      font-size: 14px;
-    }
-  </style>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./assets/styles.css">
 </head>
 <body>
-  <main>
-    <h1>RoboCasa t-SNE</h1>
-    <p>Static browser entrypoint for baseline, MGD, and RKD t-SNE runs.</p>
-    <div class="grid">
-      <a class="card" href="./baseline/">
-        <h2>baseline</h2>
-        <span>Baseline checkpoints and comparisons</span>
-      </a>
-      <a class="card" href="./MGD/">
-        <h2>MGD</h2>
-        <span>MGD family outputs</span>
-      </a>
-      <a class="card" href="./RKD/">
-        <h2>RKD</h2>
-        <span>RKD family outputs</span>
-      </a>
-    </div>
-  </main>
+  <div id="app"></div>
+  <script src="./assets/app.js?v=20260616-1"></script>
 </body>
 </html>
