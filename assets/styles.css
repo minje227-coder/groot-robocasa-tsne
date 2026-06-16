@@ -182,10 +182,15 @@ svg {
 }
 
 .dot.selected {
-  stroke: #ffffff;
-  stroke-width: 2.8;
+  stroke: rgba(15, 23, 42, 0.82);
+  stroke-width: 1.15;
+}
+
+.selected-ring {
+  stroke: rgba(15, 23, 42, 0.24);
+  stroke-width: 0.28;
   filter: drop-shadow(0 0 0.9px rgba(15, 23, 42, 0.95))
-    drop-shadow(0 0 6px rgba(15, 23, 42, 0.28));
+    drop-shadow(0 0 6px rgba(15, 23, 42, 0.22));
 }
 
 .panel h2, .sidebar h2 {

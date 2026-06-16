@@ -313,12 +313,22 @@ function renderChart() {
   }
   for (const point of visiblePoints) {
     const seq = state.sequences.sequences[point.seq];
+    const taskColor = colors[seq.task_id % colors.length];
+    if (isSelected(point)) {
+      const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      ring.setAttribute("cx", point.x);
+      ring.setAttribute("cy", point.y);
+      ring.setAttribute("r", "1.12");
+      ring.setAttribute("class", "dot selected-ring");
+      ring.setAttribute("fill", taskColor);
+      svg.appendChild(ring);
+    }
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", point.x);
     c.setAttribute("cy", point.y);
-    c.setAttribute("r", isSelected(point) ? 0.95 : 0.55);
+    c.setAttribute("r", isSelected(point) ? "0.54" : "0.55");
     c.setAttribute("class", `dot${isSelected(point) ? " selected" : ""}`);
-    c.setAttribute("fill", colors[seq.task_id % colors.length]);
+    c.setAttribute("fill", isSelected(point) ? "#ffffff" : taskColor);
     c.dataset.seq = String(point.seq);
     c.dataset.anchor = String(point.anchor);
     c.dataset.frame = String(point.frame);
@@ -375,13 +385,16 @@ function syncSelectionToVideo(video) {
 }
 
 function updateSelectedMarker() {
+  renderChart();
   for (const dot of document.querySelectorAll("circle.dot")) {
     const selected = state.selected
       && Number(dot.dataset.seq) === state.selected.seq
       && Number(dot.dataset.anchor) === state.selected.anchor
       && Number(dot.dataset.frame) === state.selected.frame;
     dot.classList.toggle("selected", Boolean(selected));
-    dot.setAttribute("r", selected ? "0.95" : "0.55");
+    if (dot.dataset.seq) {
+      dot.setAttribute("r", selected ? "0.54" : "0.55");
+    }
   }
 }
 
