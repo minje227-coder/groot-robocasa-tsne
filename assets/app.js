@@ -499,6 +499,7 @@ function updateSelectionFrame() {
 
 function renderPanel() {
   const panel = document.querySelector(".panel");
+  const savedScrollTop = panel ? panel.scrollTop : 0;
   const seq = state.selected ? state.sequences.sequences[state.selected.seq] : null;
   panel.innerHTML = "";
   renderTaskDescriptionPanel(panel);
@@ -520,6 +521,9 @@ function renderPanel() {
   if (!Object.keys(seq.videos || {}).length) {
     panel.appendChild(el("p", { class: "status", text: "No video available for this sequence." }));
   }
+  requestAnimationFrame(() => {
+    panel.scrollTop = savedScrollTop;
+  });
 }
 
 function renderTaskDescriptionPanel(panel) {
