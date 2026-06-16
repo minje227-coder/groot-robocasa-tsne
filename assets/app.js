@@ -253,6 +253,9 @@ function renderChart() {
     c.setAttribute("r", isSelected(point) ? 0.95 : 0.55);
     c.setAttribute("class", `dot${isSelected(point) ? " selected" : ""}`);
     c.setAttribute("fill", colors[seq.task_id % colors.length]);
+    c.dataset.seq = String(point.seq);
+    c.dataset.anchor = String(point.anchor);
+    c.dataset.frame = String(point.frame);
     c.addEventListener("click", () => {
       state.selected = point;
       renderViewer();
@@ -270,6 +273,55 @@ function isSelected(point) {
     && state.selected.seq === point.seq
     && state.selected.anchor === point.anchor
     && state.selected.frame === point.frame;
+}
+
+function getCurrentFeaturePoints() {
+  const pointPayload = state.pointsByFeature.get(state.feature);
+  if (!pointPayload) return [];
+  return pointPayload.points.map((row) => ({
+    x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
+  }));
+}
+
+function nearestPointForFrame(seqId, frame) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const point of getCurrentFeaturePoints()) {
+    if (point.seq !== seqId) continue;
+    const dist = Math.abs(point.frame - frame);
+    if (dist < bestDist) {
+      best = point;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+function syncSelectionToVideo(video) {
+  if (!state.selected) return;
+  const fps = state.runManifest.fps || 20;
+  const frame = Math.round(video.currentTime * fps);
+  const point = nearestPointForFrame(state.selected.seq, frame);
+  if (!point || isSelected(point)) return;
+  state.selected = point;
+  updateSelectedMarker();
+  updateSelectionFrame();
+}
+
+function updateSelectedMarker() {
+  for (const dot of document.querySelectorAll("circle.dot")) {
+    const selected = state.selected
+      && Number(dot.dataset.seq) === state.selected.seq
+      && Number(dot.dataset.anchor) === state.selected.anchor
+      && Number(dot.dataset.frame) === state.selected.frame;
+    dot.classList.toggle("selected", Boolean(selected));
+    dot.setAttribute("r", selected ? "0.95" : "0.55");
+  }
+}
+
+function updateSelectionFrame() {
+  const frameNode = document.getElementById("selection-frame");
+  if (frameNode && state.selected) frameNode.textContent = String(state.selected.frame);
 }
 
 function renderPanel() {
@@ -291,7 +343,7 @@ function renderPanel() {
       ["Task", seq.task_name],
       ["Description", seq.description],
       ["Episode", String(seq.episode_index)],
-      ["Frame", String(state.selected.frame)],
+      ["Frame", String(state.selected.frame), "selection-frame"],
     ]),
   ]));
   if (cams.length) {
@@ -309,6 +361,8 @@ function renderPanel() {
     video.addEventListener("loadedmetadata", () => {
       video.currentTime = Math.max(0, state.selected.frame / (state.runManifest.fps || 20));
     });
+    video.addEventListener("timeupdate", () => syncSelectionToVideo(video));
+    video.addEventListener("seeked", () => syncSelectionToVideo(video));
     panel.appendChild(video);
   } else {
     panel.appendChild(el("p", { class: "status", text: "No video available for this sequence." }));
@@ -396,10 +450,11 @@ function renderTaskDescriptionPanel(panel) {
 
 function definitionList(rows) {
   const dl = el("dl");
-  for (const [k, v] of rows) {
+  for (const [k, v, id] of rows) {
+    const ddAttrs = id ? { text: v, id } : { text: v };
     dl.appendChild(el("div", {}, [
       el("dt", { text: k }),
-      el("dd", { text: v }),
+      el("dd", ddAttrs),
     ]));
   }
   return dl;
