@@ -273,7 +273,7 @@ function renderTabs() {
       class: "mini-btn zoom-btn",
       text: "-",
       onclick: () => {
-        state.chartZoom = Math.max(1, state.chartZoom / 1.25);
+        state.chartZoom = Math.max(0.25, state.chartZoom / 1.25);
         updateChartViewBox();
       },
       title: "Zoom out",
@@ -375,10 +375,10 @@ function syncVideosFrom(source, options = {}) {
 function renderChart() {
   const wrap = document.querySelector(".chart-wrap");
   const pointPayload = state.pointsByFeature.get(state.feature);
-  const points = pointPayload.points.map((row) => ({
+  const allPoints = pointPayload.points.map((row) => ({
     x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
   }));
-  const visiblePoints = points.filter((point) => state.visibleSeqs.has(point.seq));
+  const visiblePoints = allPoints.filter((point) => state.visibleSeqs.has(point.seq));
   if (state.selected && !state.visibleSeqs.has(state.selected.seq)) {
     state.selected = null;
   }
@@ -386,8 +386,8 @@ function renderChart() {
     wrap.innerHTML = `<p class="status">No task descriptions selected.</p>`;
     return;
   }
-  const xs = visiblePoints.map((p) => p.x);
-  const ys = visiblePoints.map((p) => p.y);
+  const xs = allPoints.map((p) => p.x);
+  const ys = allPoints.map((p) => p.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   const padX = (maxX - minX || 1) * 0.08;
@@ -553,9 +553,6 @@ function syncSelectionToVideo(video) {
   const point = nearestPointForFrame(state.selected.seq, frame);
   if (!point || isSelected(point)) return;
   state.selected = point;
-  if (state.chartZoom <= 1) {
-    state.chartCenter = { x: point.x, y: point.y };
-  }
   updateSelectedMarker();
   updateSelectionFrame();
 }
