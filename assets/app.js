@@ -215,15 +215,28 @@ function renderSidebar() {
     })
   );
   const runs = (state.catalog.runs || []).filter((run) => run.family === state.family);
-  const runButtons = runs.map((run) =>
-    el("button", {
-      class: `run-btn${state.activeRunId === run.id ? " active" : ""}${state.selectedCharts.some((chart) => chart.runId === run.id) ? " selected" : ""}`,
-      onclick: () => loadRun(run),
-    }, [
-      el("strong", { text: run.label || run.id }),
-      el("span", { text: (run.features || []).join(" / ") }),
-    ])
-  );
+  const runButtons = runs.map((run) => {
+    const isShown = state.selectedCharts.some((chart) => chart.runId === run.id);
+    return el("div", { class: "run-item" }, [
+      el("button", {
+        class: `run-btn${state.activeRunId === run.id ? " active" : ""}${isShown ? " selected" : ""}`,
+        onclick: () => loadRun(run),
+      }, [
+        el("strong", { text: run.label || run.id }),
+        el("span", { text: (run.features || []).join(" / ") }),
+      ]),
+      el("button", {
+        class: "run-off-btn",
+        text: "Off",
+        disabled: isShown ? null : "",
+        title: isShown ? `Hide all charts for ${run.label || run.id}` : "No charts shown for this run",
+        onclick: (event) => {
+          event.stopPropagation();
+          removeRunCharts(run.id);
+        },
+      }),
+    ]);
+  });
 
   sidebar.innerHTML = "";
   sidebar.appendChild(el("h2", { text: "Family" }));
@@ -301,6 +314,61 @@ function getSelectedFeaturesForRun(runId) {
   return state.selectedCharts
     .filter((chart) => chart.runId === runId)
     .map((chart) => chart.feature);
+}
+
+function removeRunCharts(runId) {
+  const removedCharts = state.selectedCharts.filter((chart) => chart.runId === runId);
+  if (!removedCharts.length) return;
+  state.selectedCharts = state.selectedCharts.filter((chart) => chart.runId !== runId);
+  for (const chart of removedCharts) {
+    state.chartStates.delete(chartKey(chart.runId, chart.feature));
+  }
+  if (state.selected?.runId === runId) {
+    state.selected = null;
+  }
+  if (!state.selectedCharts.length) {
+    state.run = null;
+    state.runManifest = null;
+    state.sequences = null;
+    state.activeRunId = null;
+    state.preferredFeatures = [];
+    state.visibleSeqs = new Set();
+    state.openTasks = new Set();
+    renderSidebar();
+    renderEmpty();
+    location.hash = `family=${encodeURIComponent(state.family)}`;
+    return;
+  }
+  if (state.activeRunId === runId) {
+    state.activeRunId = state.selectedCharts[0].runId;
+  }
+  const activeRun = getRunById(state.activeRunId);
+  state.run = activeRun;
+  state.runManifest = activeRun ? state.runManifestsById.get(activeRun.id) || null : null;
+  state.sequences = activeRun ? state.sequencesByRunId.get(activeRun.id) || null : null;
+  state.preferredFeatures = state.activeRunId ? getSelectedFeaturesForRun(state.activeRunId) : [];
+  ensureSelectedPoint(true);
+  renderSidebar();
+  renderViewer();
+  location.hash = `family=${encodeURIComponent(state.family)}&run=${encodeURIComponent(state.activeRunId)}`;
+}
+
+function removeChartSelection(runId, feature) {
+  const hasSelection = state.selectedCharts.some((chart) => chart.runId === runId && chart.feature === feature);
+  if (!hasSelection) return;
+  if (state.selectedCharts.length === 1) {
+    removeRunCharts(runId);
+    return;
+  }
+  state.selectedCharts = state.selectedCharts.filter((chart) => !(chart.runId === runId && chart.feature === feature));
+  state.chartStates.delete(chartKey(runId, feature));
+  if (state.selected?.runId === runId) {
+    state.selected = null;
+  }
+  state.preferredFeatures = state.activeRunId ? getSelectedFeaturesForRun(state.activeRunId) : [];
+  ensureSelectedPoint(true);
+  renderSidebar();
+  renderViewer();
 }
 
 function renderViewer() {
@@ -516,6 +584,12 @@ function renderCharts() {
     }, [
       el("div", { class: "chart-card-head" }, [
         el("span", { class: "chart-card-title", text: label }),
+        el("button", {
+          class: "chart-off-btn",
+          text: "Off",
+          title: `Hide ${label}`,
+          onclick: () => removeChartSelection(chart.runId, chart.feature),
+        }),
       ]),
       el("div", {
         class: "chart-wrap",
