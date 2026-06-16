@@ -462,7 +462,6 @@ function renderChart() {
 function getChartCenter() {
   if (!state.chartBaseView) return { x: 0, y: 0 };
   if (state.chartCenter) return state.chartCenter;
-  if (state.selected) return { x: state.selected.x, y: state.selected.y };
   return {
     x: state.chartBaseView.baseX + (state.chartBaseView.baseWidth / 2),
     y: state.chartBaseView.baseY + (state.chartBaseView.baseHeight / 2),
