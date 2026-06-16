@@ -123,6 +123,10 @@ body.resizing-panel {
   background: var(--accent-soft);
 }
 
+.run-btn.selected:not(.active) {
+  border-color: #8fb7df;
+}
+
 .run-list {
   display: grid;
   gap: 8px;
@@ -230,7 +234,20 @@ body.resizing-panel {
 }
 
 .chart-grid.chart-count-3 {
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.chart-grid.chart-count-4 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.chart-grid.chart-count-5,
+.chart-grid.chart-count-6 {
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .chart-card {
@@ -249,6 +266,19 @@ body.resizing-panel {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.chart-grid.chart-count-2 .chart-wrap,
+.chart-grid.chart-count-3 .chart-wrap {
+  height: calc(100vh - 384px);
+  min-height: 360px;
+}
+
+.chart-grid.chart-count-4 .chart-wrap,
+.chart-grid.chart-count-5 .chart-wrap,
+.chart-grid.chart-count-6 .chart-wrap {
+  height: 34vh;
+  min-height: 280px;
 }
 
 .video-strip {
@@ -526,11 +556,16 @@ video {
     grid-template-columns: 1fr;
   }
   .chart-grid,
-  .chart-grid.chart-count-3 {
+  .chart-grid.chart-count-4 {
     grid-template-columns: 1fr;
   }
   .chart-grid.chart-count-2 {
     grid-auto-columns: minmax(360px, 1fr);
+  }
+  .chart-grid.chart-count-3,
+  .chart-grid.chart-count-5,
+  .chart-grid.chart-count-6 {
+    grid-template-columns: repeat(3, minmax(300px, 1fr));
   }
   .video-strip + .tabs + .chart-wrap {
     height: 58vh;

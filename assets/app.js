@@ -4,8 +4,11 @@ const state = {
   run: null,
   runManifest: null,
   sequences: null,
-  pointsByFeature: new Map(),
-  selectedFeatures: [],
+  activeRunId: null,
+  runManifestsById: new Map(),
+  sequencesByRunId: new Map(),
+  pointsByChart: new Map(),
+  selectedCharts: [],
   preferredFeatures: [],
   cam: "robot0_agentview_left",
   selected: null,
@@ -19,6 +22,14 @@ const state = {
   pendingPanelScrollTop: null,
   pendingTaskPanelScrollTop: null,
 };
+
+function chartKey(runId, feature) {
+  return `${runId}::${feature}`;
+}
+
+function getRunById(runId) {
+  return state.catalog?.runs?.find((run) => run.id === runId) || null;
+}
 
 const familyLabels = {
   baseline: "baseline",
@@ -87,8 +98,9 @@ async function applyHash() {
     state.run = null;
     state.runManifest = null;
     state.sequences = null;
-    state.pointsByFeature.clear();
-    state.selectedFeatures = [];
+    state.activeRunId = null;
+    state.pointsByChart.clear();
+    state.selectedCharts = [];
     state.chartStates.clear();
     state.selected = null;
     state.visibleSeqs = new Set();
@@ -189,6 +201,10 @@ function renderSidebar() {
       onclick: () => {
         state.family = family;
         state.run = null;
+        state.activeRunId = null;
+        state.selectedCharts = [];
+        state.selected = null;
+        state.chartStates.clear();
         location.hash = `family=${encodeURIComponent(family)}`;
         renderSidebar();
         renderEmpty();
@@ -198,7 +214,7 @@ function renderSidebar() {
   const runs = (state.catalog.runs || []).filter((run) => run.family === state.family);
   const runButtons = runs.map((run) =>
     el("button", {
-      class: `run-btn${state.run && state.run.id === run.id ? " active" : ""}`,
+      class: `run-btn${state.activeRunId === run.id ? " active" : ""}${state.selectedCharts.some((chart) => chart.runId === run.id) ? " selected" : ""}`,
       onclick: () => loadRun(run),
     }, [
       el("strong", { text: run.label || run.id }),
@@ -225,52 +241,86 @@ function renderEmpty() {
 }
 
 async function loadRun(run, options = {}) {
+  const isFirstChart = !state.selectedCharts.length;
   state.run = run;
-  state.pointsByFeature.clear();
-  state.chartStates.clear();
-  state.selected = null;
+  state.activeRunId = run.id;
   renderSidebar();
-  document.querySelector(".stage").innerHTML = `<div class="chart-wrap"><p class="status">Loading ${run.label || run.id}...</p></div>`;
-  document.querySelector(".panel").innerHTML = "";
-  const base = `./${run.path}/`;
-  state.runManifest = await fetchJson(`${base}manifest.json`);
-  state.sequences = await fetchJson(`${base}${state.runManifest.sequences_file}`);
-  state.visibleSeqs = new Set(state.sequences.sequences.map((seq) => seq.seq_id));
-  state.openTasks = new Set();
+  if (!state.selectedCharts.length) {
+    document.querySelector(".stage").innerHTML = `<div class="chart-wrap"><p class="status">Loading ${run.label || run.id}...</p></div>`;
+    document.querySelector(".panel").innerHTML = "";
+  }
+  await loadRunAssets(run);
+  if (isFirstChart) {
+    state.visibleSeqs = new Set(state.sequences.sequences.map((seq) => seq.seq_id));
+    state.openTasks = new Set();
+  }
   const preferred = state.preferredFeatures.filter((feature) =>
     state.runManifest.features.includes(feature)
   );
-  state.selectedFeatures = preferred.length ? preferred : [state.runManifest.features[0]];
-  state.preferredFeatures = [...state.selectedFeatures];
+  if (!state.selectedCharts.some((chart) => chart.runId === run.id)) {
+    const feature = preferred[0] || state.runManifest.features[0];
+    state.selectedCharts.push({ runId: run.id, feature });
+  }
+  state.preferredFeatures = getSelectedFeaturesForRun(run.id);
   if (options.updateHash !== false) {
     location.hash = `family=${encodeURIComponent(run.family)}&run=${encodeURIComponent(run.id)}`;
   }
-  await Promise.all(state.selectedFeatures.map((feature) => loadFeature(feature)));
+  await Promise.all(state.selectedCharts.map((chart) => loadChartData(chart.runId, chart.feature)));
+  ensureSelectedPoint(true);
   renderViewer();
 }
 
-async function loadFeature(feature) {
-  if (!state.pointsByFeature.has(feature)) {
-    const base = `./${state.run.path}/`;
-    const file = state.runManifest.points_files[feature];
-    state.pointsByFeature.set(feature, await fetchJson(`${base}${file}`));
+async function loadRunAssets(run) {
+  if (!state.runManifestsById.has(run.id)) {
+    const base = `./${run.path}/`;
+    const manifest = await fetchJson(`${base}manifest.json`);
+    const sequences = await fetchJson(`${base}${manifest.sequences_file}`);
+    state.runManifestsById.set(run.id, manifest);
+    state.sequencesByRunId.set(run.id, sequences);
   }
-  ensureSelectedPoint();
+  state.runManifest = state.runManifestsById.get(run.id);
+  state.sequences = state.sequencesByRunId.get(run.id);
+}
+
+async function loadChartData(runId, feature) {
+  const run = getRunById(runId);
+  if (!run) return;
+  await loadRunAssets(run);
+  const key = chartKey(runId, feature);
+  if (!state.pointsByChart.has(key)) {
+    const base = `./${run.path}/`;
+    const file = state.runManifestsById.get(runId).points_files[feature];
+    state.pointsByChart.set(key, await fetchJson(`${base}${file}`));
+  }
+}
+
+function getSelectedFeaturesForRun(runId) {
+  return state.selectedCharts
+    .filter((chart) => chart.runId === runId)
+    .map((chart) => chart.feature);
 }
 
 function renderViewer() {
+  ensureSelectedPoint(true);
   renderTabs();
   renderCharts();
   renderPanel();
 }
 
-function ensureSelectedPoint() {
-  if (state.selected) return;
-  const feature = state.selectedFeatures[0];
-  const pointPayload = state.pointsByFeature.get(feature);
+function ensureSelectedPoint(allowReplace = false) {
+  if (state.selected && state.visibleSeqs.has(state.selected.seq)) return;
+  if (state.selected && !allowReplace) return;
+  const chart = state.selectedCharts[0];
+  if (!chart) return;
+  const pointPayload = state.pointsByChart.get(chartKey(chart.runId, chart.feature));
   if (!pointPayload || !pointPayload.points?.length) return;
-  const first = pointPayload.points[0];
+  const first = pointPayload.points.find((row) => state.visibleSeqs.has(row[2]));
+  if (!first) {
+    state.selected = null;
+    return;
+  }
   state.selected = {
+    runId: chart.runId,
     seq: first[2],
     anchor: first[3],
     frame: first[4],
@@ -279,6 +329,9 @@ function ensureSelectedPoint() {
 }
 
 function renderTabs() {
+  const activeRun = getRunById(state.activeRunId);
+  const activeManifest = state.activeRunId ? state.runManifestsById.get(state.activeRunId) : null;
+  const features = activeManifest?.features || state.runManifest?.features || [];
   const zoomControls = el("div", { class: "zoom-controls" }, [
     el("button", {
       class: `mini-btn zoom-btn pan-toggle${state.panMode ? " active" : ""}`,
@@ -309,9 +362,9 @@ function renderTabs() {
     }),
   ]);
   const tabs = el("div", { class: "tabs" },
-    state.runManifest.features.map((feature) =>
+    features.map((feature) =>
       el("button", {
-        class: `tab-btn${state.selectedFeatures.includes(feature) ? " active" : ""}`,
+        class: `tab-btn${hasChart(state.activeRunId, feature) ? " active" : ""}`,
         text: feature,
         onclick: async () => {
           await toggleFeature(feature);
@@ -328,33 +381,41 @@ function renderTabs() {
 }
 
 async function toggleFeature(feature) {
-  const isSelected = state.selectedFeatures.includes(feature);
-  if (isSelected && state.selectedFeatures.length === 1) return;
+  const runId = state.activeRunId;
+  if (!runId) return;
+  const isSelected = hasChart(runId, feature);
+  if (isSelected && state.selectedCharts.length === 1) return;
   if (isSelected) {
-    state.selectedFeatures = state.selectedFeatures.filter((item) => item !== feature);
-  } else {
-    await loadFeature(feature);
-    state.selectedFeatures = state.runManifest.features.filter((item) =>
-      [...state.selectedFeatures, feature].includes(item)
+    state.selectedCharts = state.selectedCharts.filter((chart) =>
+      !(chart.runId === runId && chart.feature === feature)
     );
+    if (state.selected?.runId === runId) state.selected = null;
+  } else {
+    await loadChartData(runId, feature);
+    state.selectedCharts.push({ runId, feature });
   }
-  state.preferredFeatures = [...state.selectedFeatures];
+  state.preferredFeatures = getSelectedFeaturesForRun(runId);
+  ensureSelectedPoint(true);
 }
 
-function getChartState(feature) {
-  if (!state.chartStates.has(feature)) {
-    state.chartStates.set(feature, {
+function hasChart(runId, feature) {
+  return state.selectedCharts.some((chart) => chart.runId === runId && chart.feature === feature);
+}
+
+function getChartState(key) {
+  if (!state.chartStates.has(key)) {
+    state.chartStates.set(key, {
       zoom: 1,
       center: null,
       baseView: null,
     });
   }
-  return state.chartStates.get(feature);
+  return state.chartStates.get(key);
 }
 
 function getZoomReadout() {
-  if (!state.selectedFeatures.length) return "1.00x";
-  const values = state.selectedFeatures.map((feature) => getChartState(feature).zoom);
+  if (!state.selectedCharts.length) return "1.00x";
+  const values = state.selectedCharts.map((chart) => getChartState(chartKey(chart.runId, chart.feature)).zoom);
   const first = values[0];
   return values.every((value) => Math.abs(value - first) < 1e-9)
     ? `${first.toFixed(2)}x`
@@ -362,10 +423,11 @@ function getZoomReadout() {
 }
 
 function scaleSelectedCharts(factor) {
-  for (const feature of state.selectedFeatures) {
-    const chartState = getChartState(feature);
+  for (const chart of state.selectedCharts) {
+    const key = chartKey(chart.runId, chart.feature);
+    const chartState = getChartState(key);
     chartState.zoom = Math.min(8, Math.max(0.25, chartState.zoom * factor));
-    updateChartViewBox(feature);
+    updateChartViewBox(chart.runId, chart.feature);
   }
   const readout = document.querySelector(".zoom-readout");
   if (readout) readout.textContent = getZoomReadout();
@@ -373,11 +435,13 @@ function scaleSelectedCharts(factor) {
 
 function renderVideoStrip(stage) {
   if (!state.selected || !state.sequences) return;
-  const seq = state.sequences.sequences[state.selected.seq];
+  const sequences = state.sequencesByRunId.get(state.selected.runId) || state.sequences;
+  const manifest = state.runManifestsById.get(state.selected.runId) || state.runManifest;
+  const seq = sequences.sequences[state.selected.seq];
   if (!seq || !seq.videos) return;
   const cams = Object.keys(seq.videos);
   if (!cams.length) return;
-  const currentTime = Math.max(0, state.selected.frame / (state.runManifest.fps || 20));
+  const currentTime = Math.max(0, state.selected.frame / (manifest.fps || 20));
   const cards = cams.map((cam) => {
     const video = el("video", {
       controls: "controls",
@@ -439,30 +503,43 @@ function renderCharts() {
   const grid = document.querySelector(".chart-grid");
   if (!grid) return;
   grid.innerHTML = "";
-  grid.className = `chart-grid chart-count-${Math.min(state.selectedFeatures.length, 3)}`;
-  for (const feature of state.selectedFeatures) {
-    const card = el("section", { class: "chart-card", "data-feature": feature }, [
+  grid.className = `chart-grid chart-count-${Math.min(state.selectedCharts.length, 6)}`;
+  for (const chart of state.selectedCharts) {
+    const run = getRunById(chart.runId);
+    const label = `${run?.label || chart.runId} / ${chart.feature}`;
+    const card = el("section", {
+      class: "chart-card",
+      "data-chart": chartKey(chart.runId, chart.feature),
+    }, [
       el("div", { class: "chart-card-head" }, [
-        el("span", { class: "chart-card-title", text: feature }),
+        el("span", { class: "chart-card-title", text: label }),
       ]),
-      el("div", { class: "chart-wrap", "data-feature": feature }),
+      el("div", {
+        class: "chart-wrap",
+        "data-run": chart.runId,
+        "data-feature": chart.feature,
+        "data-chart": chartKey(chart.runId, chart.feature),
+      }),
     ]);
     grid.appendChild(card);
-    renderChart(feature);
+    renderChart(chart.runId, chart.feature);
   }
 }
 
-function renderChart(feature) {
-  const wrap = document.querySelector(`.chart-wrap[data-feature="${feature}"]`);
-  const chartState = getChartState(feature);
-  const pointPayload = state.pointsByFeature.get(feature);
+function renderChart(runId, feature) {
+  const key = chartKey(runId, feature);
+  const wrap = document.querySelector(`.chart-wrap[data-chart="${key}"]`);
+  const chartState = getChartState(key);
+  const pointPayload = state.pointsByChart.get(key);
   if (!wrap || !pointPayload) return;
+  const sequences = state.sequencesByRunId.get(runId);
   const allPoints = pointPayload.points.map((row) => ({
     x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
   }));
   const visiblePoints = allPoints.filter((point) => state.visibleSeqs.has(point.seq));
   if (state.selected && !state.visibleSeqs.has(state.selected.seq)) {
     state.selected = null;
+    ensureSelectedPoint(true);
   }
   if (!visiblePoints.length) {
     wrap.innerHTML = `<p class="status">No task descriptions selected.</p>`;
@@ -480,6 +557,7 @@ function renderChart(feature) {
   const baseHeight = (maxY - minY) + 2 * padY;
   chartState.baseView = { baseX, baseY, baseWidth, baseHeight };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.dataset.run = runId;
   svg.dataset.feature = feature;
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -498,7 +576,7 @@ function renderChart(feature) {
   }
   for (const [seqId, seqPoints] of bySeq) {
     seqPoints.sort((a, b) => a.anchor - b.anchor);
-    const seq = state.sequences.sequences[seqId];
+    const seq = sequences.sequences[seqId];
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     const d = seqPoints.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ");
     path.setAttribute("d", d);
@@ -507,9 +585,10 @@ function renderChart(feature) {
     svg.appendChild(path);
   }
   for (const point of visiblePoints) {
-    const seq = state.sequences.sequences[point.seq];
+    const chartPoint = { ...point, runId };
+    const seq = sequences.sequences[point.seq];
     const taskColor = colors[seq.task_id % colors.length];
-    if (isSelected(point)) {
+    if (isSelected(chartPoint)) {
       const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       ring.setAttribute("cx", point.x);
       ring.setAttribute("cy", point.y);
@@ -521,14 +600,20 @@ function renderChart(feature) {
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", point.x);
     c.setAttribute("cy", point.y);
-    c.setAttribute("r", isSelected(point) ? "0.54" : "0.55");
-    c.setAttribute("class", `dot${isSelected(point) ? " selected" : ""}`);
-    c.setAttribute("fill", isSelected(point) ? "#ffffff" : taskColor);
+    c.setAttribute("r", isSelected(chartPoint) ? "0.54" : "0.55");
+    c.setAttribute("class", `dot${isSelected(chartPoint) ? " selected" : ""}`);
+    c.setAttribute("fill", isSelected(chartPoint) ? "#ffffff" : taskColor);
     c.dataset.seq = String(point.seq);
     c.dataset.anchor = String(point.anchor);
     c.dataset.frame = String(point.frame);
     c.addEventListener("click", () => {
-      state.selected = point;
+      state.selected = {
+        runId,
+        seq: point.seq,
+        anchor: point.anchor,
+        frame: point.frame,
+        progress: point.progress,
+      };
       renderCharts();
       renderPanel();
     });
@@ -539,12 +624,12 @@ function renderChart(feature) {
   wrap.innerHTML = "";
   wrap.classList.toggle("pan-enabled", state.panMode);
   wrap.appendChild(svg);
-  attachChartPan(svg, feature);
-  updateChartViewBox(feature);
+  attachChartPan(svg, runId, feature);
+  updateChartViewBox(runId, feature);
 }
 
-function getChartCenter(feature) {
-  const chartState = getChartState(feature);
+function getChartCenter(runId, feature) {
+  const chartState = getChartState(chartKey(runId, feature));
   if (!chartState.baseView) return { x: 0, y: 0 };
   if (chartState.center) return chartState.center;
   return {
@@ -553,12 +638,13 @@ function getChartCenter(feature) {
   };
 }
 
-function updateChartViewBox(feature) {
-  const svg = document.querySelector(`.chart-wrap[data-feature="${feature}"] svg`);
-  const chartState = getChartState(feature);
+function updateChartViewBox(runId, feature) {
+  const key = chartKey(runId, feature);
+  const svg = document.querySelector(`.chart-wrap[data-chart="${key}"] svg`);
+  const chartState = getChartState(key);
   if (!svg || !chartState.baseView) return;
   const { baseWidth, baseHeight } = chartState.baseView;
-  const center = getChartCenter(feature);
+  const center = getChartCenter(runId, feature);
   const zoomWidth = baseWidth / chartState.zoom;
   const zoomHeight = baseHeight / chartState.zoom;
   svg.setAttribute(
@@ -569,9 +655,10 @@ function updateChartViewBox(feature) {
   if (readout) readout.textContent = getZoomReadout();
 }
 
-function zoomChartAt(feature, clientX, clientY, direction) {
-  const svg = document.querySelector(`.chart-wrap[data-feature="${feature}"] svg`);
-  const chartState = getChartState(feature);
+function zoomChartAt(runId, feature, clientX, clientY, direction) {
+  const key = chartKey(runId, feature);
+  const svg = document.querySelector(`.chart-wrap[data-chart="${key}"] svg`);
+  const chartState = getChartState(key);
   if (!svg || !chartState.baseView) return;
   const bounds = svg.getBoundingClientRect();
   if (!bounds.width || !bounds.height) return;
@@ -580,7 +667,7 @@ function zoomChartAt(feature, clientX, clientY, direction) {
   const nextZoom = Math.min(8, Math.max(0.25, chartState.zoom * factor));
   if (nextZoom === chartState.zoom) return;
 
-  const currentCenter = getChartCenter(feature);
+  const currentCenter = getChartCenter(runId, feature);
   const currentWidth = chartState.baseView.baseWidth / chartState.zoom;
   const currentHeight = chartState.baseView.baseHeight / chartState.zoom;
   const currentLeft = currentCenter.x - (currentWidth / 2);
@@ -597,26 +684,26 @@ function zoomChartAt(feature, clientX, clientY, direction) {
     x: worldX - (fracX * nextWidth) + (nextWidth / 2),
     y: worldY - (fracY * nextHeight) + (nextHeight / 2),
   };
-  updateChartViewBox(feature);
+  updateChartViewBox(runId, feature);
 }
 
-function attachChartPan(svg, feature) {
+function attachChartPan(svg, runId, feature) {
   const surface = svg.querySelector(".chart-pan-surface");
   if (!surface) return;
   svg.addEventListener("wheel", (event) => {
     event.preventDefault();
-    zoomChartAt(feature, event.clientX, event.clientY, event.deltaY);
+    zoomChartAt(runId, feature, event.clientX, event.clientY, event.deltaY);
   }, { passive: false });
   svg.addEventListener("pointerdown", (event) => {
     const allowLeftPan = event.button === 0 && state.panMode;
     const allowMiddlePan = event.button === 1;
-    const chartState = getChartState(feature);
+    const chartState = getChartState(chartKey(runId, feature));
     if (!chartState.baseView || (!allowLeftPan && !allowMiddlePan)) return;
     event.preventDefault();
     svg.setPointerCapture(event.pointerId);
     svg.classList.add("panning");
     const bounds = svg.getBoundingClientRect();
-    const startCenter = getChartCenter(feature);
+    const startCenter = getChartCenter(runId, feature);
     const zoomWidth = chartState.baseView.baseWidth / chartState.zoom;
     const zoomHeight = chartState.baseView.baseHeight / chartState.zoom;
 
@@ -624,7 +711,7 @@ function attachChartPan(svg, feature) {
       const dx = ((moveEvent.clientX - event.clientX) / bounds.width) * zoomWidth;
       const dy = ((moveEvent.clientY - event.clientY) / bounds.height) * zoomHeight;
       chartState.center = { x: startCenter.x - dx, y: startCenter.y - dy };
-      updateChartViewBox(feature);
+      updateChartViewBox(runId, feature);
     };
     const onUp = () => {
       svg.classList.remove("panning");
@@ -641,17 +728,20 @@ function attachChartPan(svg, feature) {
 
 function isSelected(point) {
   return state.selected
+    && state.selected.runId === point.runId
     && state.selected.seq === point.seq
     && state.selected.anchor === point.anchor
     && state.selected.frame === point.frame;
 }
 
 function getCurrentFeaturePoints() {
-  const feature = state.selectedFeatures[0];
-  const pointPayload = state.pointsByFeature.get(feature);
+  const chart = state.selectedCharts.find((item) => item.runId === state.selected?.runId)
+    || state.selectedCharts[0];
+  if (!chart) return [];
+  const pointPayload = state.pointsByChart.get(chartKey(chart.runId, chart.feature));
   if (!pointPayload) return [];
   return pointPayload.points.map((row) => ({
-    x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
+    x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5], runId: chart.runId,
   }));
 }
 
@@ -671,7 +761,8 @@ function nearestPointForFrame(seqId, frame) {
 
 function syncSelectionToVideo(video) {
   if (!state.selected) return;
-  const fps = state.runManifest.fps || 20;
+  const manifest = state.runManifestsById.get(state.selected.runId) || state.runManifest;
+  const fps = manifest.fps || 20;
   const frame = Math.round(video.currentTime * fps);
   const point = nearestPointForFrame(state.selected.seq, frame);
   if (!point || isSelected(point)) return;
@@ -702,7 +793,10 @@ function renderPanel() {
     state.pendingTaskPanelScrollTop ?? (panel?.querySelector(".task-panel")?.scrollTop || 0);
   state.pendingPanelScrollTop = null;
   state.pendingTaskPanelScrollTop = null;
-  const seq = state.selected ? state.sequences.sequences[state.selected.seq] : null;
+  const selectedSequences = state.selected
+    ? (state.sequencesByRunId.get(state.selected.runId) || state.sequences)
+    : null;
+  const seq = state.selected ? selectedSequences.sequences[state.selected.seq] : null;
   panel.innerHTML = "";
   renderTaskDescriptionPanel(panel);
   panel.appendChild(el("h2", { text: "Selection" }));
@@ -710,10 +804,14 @@ function renderPanel() {
     panel.appendChild(el("p", { class: "status", text: "Click a trajectory point." }));
     return;
   }
+  const selectedRun = getRunById(state.selected.runId);
   panel.appendChild(el("div", { class: "info" }, [
     definitionList([
-      ["Run", state.runManifest.label || state.runManifest.run_id],
-      ["Feature", state.selectedFeatures.join(", ")],
+      ["Run", selectedRun?.label || state.selected.runId],
+      ["Feature", state.selectedCharts
+        .filter((chart) => chart.runId === state.selected.runId)
+        .map((chart) => chart.feature)
+        .join(", ")],
       ["Task", seq.task_name],
       ["Description", seq.description],
       ["Episode", String(seq.episode_index)],
@@ -745,6 +843,7 @@ function renderTaskDescriptionPanel(panel) {
     onclick: () => {
       preserveTaskPanelScroll();
       state.visibleSeqs = new Set(sequences.map((seq) => seq.seq_id));
+      ensureSelectedPoint(true);
       renderViewer();
     },
   });
@@ -755,6 +854,7 @@ function renderTaskDescriptionPanel(panel) {
     onclick: () => {
       preserveTaskPanelScroll();
       state.visibleSeqs = new Set();
+      ensureSelectedPoint(true);
       renderViewer();
     },
   });
@@ -793,6 +893,7 @@ function renderTaskDescriptionPanel(panel) {
           if (nextOn) state.visibleSeqs.add(seq.seq_id);
           else state.visibleSeqs.delete(seq.seq_id);
         }
+        ensureSelectedPoint(true);
         renderViewer();
       },
     });
@@ -807,6 +908,7 @@ function renderTaskDescriptionPanel(panel) {
           preserveTaskPanelScroll();
           if (state.visibleSeqs.has(seq.seq_id)) state.visibleSeqs.delete(seq.seq_id);
           else state.visibleSeqs.add(seq.seq_id);
+          ensureSelectedPoint(true);
           renderViewer();
         },
       }));
