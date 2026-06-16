@@ -6,6 +6,7 @@ const state = {
   sequences: null,
   pointsByFeature: new Map(),
   feature: null,
+  preferredFeature: null,
   cam: "robot0_agentview_left",
   selected: null,
   visibleSeqs: new Set(),
@@ -238,7 +239,11 @@ async function loadRun(run, options = {}) {
   state.sequences = await fetchJson(`${base}${state.runManifest.sequences_file}`);
   state.visibleSeqs = new Set(state.sequences.sequences.map((seq) => seq.seq_id));
   state.openTasks = new Set();
-  state.feature = state.runManifest.features[0];
+  const preferred = state.preferredFeature;
+  state.feature = state.runManifest.features.includes(preferred)
+    ? preferred
+    : state.runManifest.features[0];
+  state.preferredFeature = state.feature;
   if (options.updateHash !== false) {
     location.hash = `family=${encodeURIComponent(run.family)}&run=${encodeURIComponent(run.id)}`;
   }
@@ -253,6 +258,7 @@ async function loadFeature(feature) {
     state.pointsByFeature.set(feature, await fetchJson(`${base}${file}`));
   }
   state.feature = feature;
+  state.preferredFeature = feature;
   ensureSelectedPoint();
 }
 
