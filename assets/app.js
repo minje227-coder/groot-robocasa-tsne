@@ -446,7 +446,6 @@ function renderChart() {
     c.dataset.frame = String(point.frame);
     c.addEventListener("click", () => {
       state.selected = point;
-      state.chartCenter = { x: point.x, y: point.y };
       renderViewer();
     });
     c.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"))
