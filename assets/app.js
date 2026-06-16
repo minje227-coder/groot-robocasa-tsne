@@ -201,8 +201,37 @@ function renderTabs() {
     )
   );
   document.querySelector(".stage").innerHTML = "";
+  renderVideoStrip(document.querySelector(".stage"));
   document.querySelector(".stage").appendChild(tabs);
   document.querySelector(".stage").appendChild(el("div", { class: "chart-wrap" }));
+}
+
+function renderVideoStrip(stage) {
+  if (!state.selected || !state.sequences) return;
+  const seq = state.sequences.sequences[state.selected.seq];
+  if (!seq || !seq.videos) return;
+  const cams = Object.keys(seq.videos);
+  if (!cams.length) return;
+  const currentTime = Math.max(0, state.selected.frame / (state.runManifest.fps || 20));
+  const cards = cams.map((cam) => {
+    const video = el("video", {
+      controls: "controls",
+      muted: "muted",
+      playsinline: "playsinline",
+      src: `./${seq.videos[cam]}`,
+    });
+    video.dataset.syncVideo = "1";
+    video.addEventListener("loadedmetadata", () => {
+      video.currentTime = currentTime;
+    });
+    video.addEventListener("timeupdate", () => syncSelectionToVideo(video));
+    video.addEventListener("seeked", () => syncSelectionToVideo(video));
+    return el("div", { class: "video-card" }, [
+      el("div", { class: "video-label", text: cam.replace("robot0_", "") }),
+      video,
+    ]);
+  });
+  stage.appendChild(el("div", { class: "video-strip" }, cards));
 }
 
 function renderChart() {
@@ -334,8 +363,6 @@ function renderPanel() {
     panel.appendChild(el("p", { class: "status", text: "Click a trajectory point." }));
     return;
   }
-  const cams = Object.keys(seq.videos || {});
-  if (cams.length && !cams.includes(state.cam)) state.cam = cams[0];
   panel.appendChild(el("div", { class: "info" }, [
     definitionList([
       ["Run", state.runManifest.label || state.runManifest.run_id],
@@ -346,25 +373,7 @@ function renderPanel() {
       ["Frame", String(state.selected.frame), "selection-frame"],
     ]),
   ]));
-  if (cams.length) {
-    panel.appendChild(el("div", { class: "cams" }, cams.map((cam) =>
-      el("button", {
-        class: `cam-btn${cam === state.cam ? " active" : ""}`,
-        text: cam.replace("robot0_", ""),
-        onclick: () => {
-          state.cam = cam;
-          renderPanel();
-        },
-      })
-    )));
-    const video = el("video", { controls: "controls", src: `./${seq.videos[state.cam]}` });
-    video.addEventListener("loadedmetadata", () => {
-      video.currentTime = Math.max(0, state.selected.frame / (state.runManifest.fps || 20));
-    });
-    video.addEventListener("timeupdate", () => syncSelectionToVideo(video));
-    video.addEventListener("seeked", () => syncSelectionToVideo(video));
-    panel.appendChild(video);
-  } else {
+  if (!Object.keys(seq.videos || {}).length) {
     panel.appendChild(el("p", { class: "status", text: "No video available for this sequence." }));
   }
 }

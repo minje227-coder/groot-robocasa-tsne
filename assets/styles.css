@@ -133,6 +133,34 @@ button, select {
   overflow: hidden;
 }
 
+.video-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.video-card {
+  min-width: 0;
+}
+
+.video-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.video-strip video {
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.video-strip + .tabs + .chart-wrap {
+  height: calc(100vh - 360px);
+  min-height: 380px;
+}
+
 svg {
   width: 100%;
   height: 100%;
@@ -341,5 +369,12 @@ video {
   .chart-wrap {
     height: 68vh;
     min-height: 360px;
+  }
+  .video-strip {
+    grid-template-columns: 1fr;
+  }
+  .video-strip + .tabs + .chart-wrap {
+    height: 58vh;
+    min-height: 320px;
   }
 }
