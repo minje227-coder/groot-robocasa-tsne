@@ -32,6 +32,10 @@ All runs use the same temporal sample manifest:
 Raw feature caches (`*.npz`) stay in the working tree for later analysis but are
 excluded from git.
 
+Plan:
+
+- [Temporal t-SNE analysis plan](TEMPORAL_TSNE_PLAN.md)
+
 Validate before pushing:
 
 ```bash
