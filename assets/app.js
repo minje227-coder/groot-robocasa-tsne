@@ -11,6 +11,7 @@ const state = {
   visibleSeqs: new Set(),
   openTasks: new Set(),
   lastHash: "",
+  syncingVideos: false,
 };
 
 const familyLabels = {
@@ -224,7 +225,11 @@ function renderVideoStrip(stage) {
     video.addEventListener("loadedmetadata", () => {
       video.currentTime = currentTime;
     });
-    video.addEventListener("timeupdate", () => syncSelectionToVideo(video));
+    video.addEventListener("play", () => syncVideosFrom(video, { syncPlayback: true }));
+    video.addEventListener("pause", () => syncVideosFrom(video, { syncPlayback: true }));
+    video.addEventListener("ratechange", () => syncVideosFrom(video, { syncPlayback: false }));
+    video.addEventListener("seeking", () => syncVideosFrom(video, { syncPlayback: false, forceTime: true }));
+    video.addEventListener("timeupdate", () => syncVideosFrom(video, { syncPlayback: false }));
     video.addEventListener("seeked", () => syncSelectionToVideo(video));
     return el("div", { class: "video-card" }, [
       el("div", { class: "video-label", text: cam.replace("robot0_", "") }),
@@ -232,6 +237,38 @@ function renderVideoStrip(stage) {
     ]);
   });
   stage.appendChild(el("div", { class: "video-strip" }, cards));
+}
+
+function getSyncVideos() {
+  return [...document.querySelectorAll("video[data-sync-video='1']")];
+}
+
+function syncVideosFrom(source, options = {}) {
+  if (state.syncingVideos) return;
+  const { syncPlayback = false, forceTime = false } = options;
+  const threshold = forceTime ? 0.001 : 0.05;
+  state.syncingVideos = true;
+  try {
+    for (const video of getSyncVideos()) {
+      if (video === source) continue;
+      if (Math.abs(video.currentTime - source.currentTime) > threshold) {
+        video.currentTime = source.currentTime;
+      }
+      if (video.playbackRate !== source.playbackRate) {
+        video.playbackRate = source.playbackRate;
+      }
+      if (syncPlayback) {
+        if (source.paused && !video.paused) video.pause();
+        if (!source.paused && video.paused) {
+          const playPromise = video.play();
+          if (playPromise && typeof playPromise.catch === "function") playPromise.catch(() => {});
+        }
+      }
+    }
+  } finally {
+    state.syncingVideos = false;
+  }
+  syncSelectionToVideo(source);
 }
 
 function renderChart() {
