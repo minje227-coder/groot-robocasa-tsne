@@ -95,6 +95,13 @@ async function applyHash() {
     }
   }
   if (!runId) {
+    if (state.selectedCharts.length) {
+      if (!state.activeRunId && state.selectedCharts[0]) {
+        state.activeRunId = state.selectedCharts[0].runId;
+      }
+      renderViewer();
+      return;
+    }
     state.run = null;
     state.runManifest = null;
     state.sequences = null;
@@ -200,14 +207,10 @@ function renderSidebar() {
       text: familyLabels[family] || family,
       onclick: () => {
         state.family = family;
-        state.run = null;
-        state.activeRunId = null;
-        state.selectedCharts = [];
-        state.selected = null;
-        state.chartStates.clear();
         location.hash = `family=${encodeURIComponent(family)}`;
         renderSidebar();
-        renderEmpty();
+        if (state.selectedCharts.length) renderViewer();
+        else renderEmpty();
       },
     })
   );
@@ -588,21 +591,12 @@ function renderChart(runId, feature) {
     const chartPoint = { ...point, runId };
     const seq = sequences.sequences[point.seq];
     const taskColor = colors[seq.task_id % colors.length];
-    if (isSelected(chartPoint)) {
-      const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      ring.setAttribute("cx", point.x);
-      ring.setAttribute("cy", point.y);
-      ring.setAttribute("r", "1.75");
-      ring.setAttribute("class", "dot selected-ring");
-      ring.setAttribute("fill", taskColor);
-      svg.appendChild(ring);
-    }
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", point.x);
     c.setAttribute("cy", point.y);
-    c.setAttribute("r", isSelected(chartPoint) ? "0.76" : "0.55");
-    c.setAttribute("class", `dot${isSelected(chartPoint) ? " selected" : ""}`);
-    c.setAttribute("fill", isSelected(chartPoint) ? "#ffffff" : taskColor);
+    c.setAttribute("r", "0.55");
+    c.setAttribute("class", "dot");
+    c.setAttribute("fill", taskColor);
     c.dataset.seq = String(point.seq);
     c.dataset.anchor = String(point.anchor);
     c.dataset.frame = String(point.frame);
@@ -620,6 +614,27 @@ function renderChart(runId, feature) {
     c.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"))
       .textContent = `${seq.task_name}\n${seq.description}\nframe ${point.frame}`;
     svg.appendChild(c);
+  }
+  for (const point of visiblePoints) {
+    const chartPoint = { ...point, runId };
+    if (!isSelected(chartPoint)) continue;
+    const seq = sequences.sequences[point.seq];
+    const taskColor = colors[seq.task_id % colors.length];
+    const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    ring.setAttribute("cx", point.x);
+    ring.setAttribute("cy", point.y);
+    ring.setAttribute("r", "1.95");
+    ring.setAttribute("class", "selected-ring");
+    ring.setAttribute("fill", taskColor);
+    svg.appendChild(ring);
+
+    const center = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    center.setAttribute("cx", point.x);
+    center.setAttribute("cy", point.y);
+    center.setAttribute("r", "0.86");
+    center.setAttribute("class", "dot selected");
+    center.setAttribute("fill", "#ffffff");
+    svg.appendChild(center);
   }
   wrap.innerHTML = "";
   wrap.classList.toggle("pan-enabled", state.panMode);
