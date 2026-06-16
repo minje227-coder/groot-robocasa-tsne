@@ -553,7 +553,9 @@ function syncSelectionToVideo(video) {
   const point = nearestPointForFrame(state.selected.seq, frame);
   if (!point || isSelected(point)) return;
   state.selected = point;
-  state.chartCenter = { x: point.x, y: point.y };
+  if (state.chartZoom <= 1) {
+    state.chartCenter = { x: point.x, y: point.y };
+  }
   updateSelectedMarker();
   updateSelectionFrame();
 }
