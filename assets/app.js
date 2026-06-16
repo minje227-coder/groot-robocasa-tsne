@@ -8,6 +8,8 @@ const state = {
   feature: null,
   cam: "robot0_agentview_left",
   selected: null,
+  visibleSeqs: new Set(),
+  openTasks: new Set(),
   lastHash: "",
 };
 
@@ -79,6 +81,8 @@ async function applyHash() {
     state.sequences = null;
     state.pointsByFeature.clear();
     state.selected = null;
+    state.visibleSeqs = new Set();
+    state.openTasks = new Set();
     renderSidebar();
     renderEmpty();
   }
@@ -158,6 +162,8 @@ async function loadRun(run, options = {}) {
   const base = `./${run.path}/`;
   state.runManifest = await fetchJson(`${base}manifest.json`);
   state.sequences = await fetchJson(`${base}${state.runManifest.sequences_file}`);
+  state.visibleSeqs = new Set(state.sequences.sequences.map((seq) => seq.seq_id));
+  state.openTasks = new Set();
   state.feature = state.runManifest.features[0];
   if (options.updateHash !== false) {
     location.hash = `family=${encodeURIComponent(run.family)}&run=${encodeURIComponent(run.id)}`;
@@ -222,6 +228,7 @@ function renderChart() {
     bySeq.get(point.seq).push(point);
   }
   for (const [seqId, seqPoints] of bySeq) {
+    if (!state.visibleSeqs.has(Number(seqId))) continue;
     seqPoints.sort((a, b) => a.anchor - b.anchor);
     const seq = state.sequences.sequences[seqId];
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -232,6 +239,7 @@ function renderChart() {
     svg.appendChild(path);
   }
   for (const point of points) {
+    if (!state.visibleSeqs.has(point.seq)) continue;
     const seq = state.sequences.sequences[point.seq];
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", point.x);
@@ -262,6 +270,7 @@ function renderPanel() {
   const panel = document.querySelector(".panel");
   const seq = state.selected ? state.sequences.sequences[state.selected.seq] : null;
   panel.innerHTML = "";
+  renderTaskDescriptionPanel(panel);
   panel.appendChild(el("h2", { text: "Selection" }));
   if (!seq) {
     panel.appendChild(el("p", { class: "status", text: "Click a trajectory point." }));
@@ -298,6 +307,85 @@ function renderPanel() {
   } else {
     panel.appendChild(el("p", { class: "status", text: "No video available for this sequence." }));
   }
+}
+
+function renderTaskDescriptionPanel(panel) {
+  const sequences = state.sequences ? state.sequences.sequences : [];
+  const byTask = new Map();
+  for (const seq of sequences) {
+    if (!byTask.has(seq.task_name)) byTask.set(seq.task_name, []);
+    byTask.get(seq.task_name).push(seq);
+  }
+
+  const allOn = el("button", {
+    class: "mini-btn",
+    text: "All ON",
+    onclick: () => {
+      state.visibleSeqs = new Set(sequences.map((seq) => seq.seq_id));
+      renderViewer();
+    },
+  });
+  const allOff = el("button", {
+    class: "mini-btn",
+    text: "All OFF",
+    onclick: () => {
+      state.visibleSeqs = new Set();
+      renderViewer();
+    },
+  });
+
+  panel.appendChild(el("h2", { text: "Task / Description" }));
+  panel.appendChild(el("div", { class: "task-toolbar" }, [allOn, allOff]));
+
+  const taskPanel = el("div", { class: "task-panel" });
+  for (const [taskName, taskSeqs] of [...byTask.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    taskSeqs.sort((a, b) => a.description.localeCompare(b.description));
+    const visibleCount = taskSeqs.filter((seq) => state.visibleSeqs.has(seq.seq_id)).length;
+    const isOpen = state.openTasks.has(taskName);
+    const taskButton = el("button", {
+      class: `task-name${visibleCount ? " active" : " inactive"}`,
+      onclick: () => {
+        if (state.openTasks.has(taskName)) state.openTasks.delete(taskName);
+        else state.openTasks.add(taskName);
+        renderPanel();
+      },
+    }, [
+      el("span", { class: "task-caret", text: isOpen ? "-" : "+" }),
+      el("span", { text: taskName }),
+      el("span", { class: "task-count", text: `${visibleCount}/${taskSeqs.length}` }),
+    ]);
+    const toggleButton = el("button", {
+      class: "task-eye",
+      text: "toggle",
+      onclick: (event) => {
+        event.stopPropagation();
+        const nextOn = visibleCount !== taskSeqs.length;
+        for (const seq of taskSeqs) {
+          if (nextOn) state.visibleSeqs.add(seq.seq_id);
+          else state.visibleSeqs.delete(seq.seq_id);
+        }
+        renderViewer();
+      },
+    });
+    const descList = el("div", { class: `desc-list${isOpen ? " open" : ""}` });
+    for (const seq of taskSeqs) {
+      const visible = state.visibleSeqs.has(seq.seq_id);
+      descList.appendChild(el("button", {
+        class: `desc-toggle${visible ? " active" : " inactive"}`,
+        text: seq.description,
+        onclick: () => {
+          if (state.visibleSeqs.has(seq.seq_id)) state.visibleSeqs.delete(seq.seq_id);
+          else state.visibleSeqs.add(seq.seq_id);
+          renderViewer();
+        },
+      }));
+    }
+    taskPanel.appendChild(el("div", { class: "task-accordion" }, [
+      el("div", { class: "task-row" }, [taskButton, toggleButton]),
+      descList,
+    ]));
+  }
+  panel.appendChild(taskPanel);
 }
 
 function definitionList(rows) {
