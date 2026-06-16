@@ -500,6 +500,7 @@ function updateSelectionFrame() {
 function renderPanel() {
   const panel = document.querySelector(".panel");
   const savedScrollTop = panel ? panel.scrollTop : 0;
+  const savedTaskPanelScrollTop = panel?.querySelector(".task-panel")?.scrollTop || 0;
   const seq = state.selected ? state.sequences.sequences[state.selected.seq] : null;
   panel.innerHTML = "";
   renderTaskDescriptionPanel(panel);
@@ -523,6 +524,8 @@ function renderPanel() {
   }
   requestAnimationFrame(() => {
     panel.scrollTop = savedScrollTop;
+    const taskPanel = panel.querySelector(".task-panel");
+    if (taskPanel) taskPanel.scrollTop = savedTaskPanelScrollTop;
   });
 }
 
