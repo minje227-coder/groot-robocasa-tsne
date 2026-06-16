@@ -253,12 +253,28 @@ async function loadFeature(feature) {
     state.pointsByFeature.set(feature, await fetchJson(`${base}${file}`));
   }
   state.feature = feature;
+  ensureSelectedPoint();
 }
 
 function renderViewer() {
   renderTabs();
   renderChart();
   renderPanel();
+}
+
+function ensureSelectedPoint() {
+  if (state.selected) return;
+  const pointPayload = state.pointsByFeature.get(state.feature);
+  if (!pointPayload || !pointPayload.points?.length) return;
+  const first = pointPayload.points[0];
+  state.selected = {
+    x: first[0],
+    y: first[1],
+    seq: first[2],
+    anchor: first[3],
+    frame: first[4],
+    progress: first[5],
+  };
 }
 
 function renderTabs() {
