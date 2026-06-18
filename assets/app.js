@@ -18,6 +18,9 @@ const state = {
   syncingVideos: false,
   panelWidth: 360,
   panMode: false,
+  colorMode: "task",
+  spacingMode: "original",
+  hoveredEpisodeKey: null,
   chartStates: new Map(),
   pendingPanelScrollTop: null,
   pendingTaskPanelScrollTop: null,
@@ -27,8 +30,48 @@ function chartKey(runId, feature) {
   return `${runId}::${feature}`;
 }
 
+function episodeKey(runId, seqId) {
+  return `${runId}::${seqId}`;
+}
+
 function getRunById(runId) {
   return state.catalog?.runs?.find((run) => run.id === runId) || null;
+}
+
+const familyOrder = ["baseline", "RKD", "MGD"];
+const featureOrder = ["raw", "processed", "action"];
+
+function orderIndex(list, value) {
+  const index = list.indexOf(value);
+  return index === -1 ? list.length : index;
+}
+
+function getCatalogRunIndex(runId) {
+  const index = state.catalog?.runs?.findIndex((run) => run.id === runId) ?? -1;
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+function chartSortKey(chart) {
+  const run = getRunById(chart.runId);
+  return {
+    family: orderIndex(familyOrder, run?.family),
+    runIndex: getCatalogRunIndex(chart.runId),
+    runLabel: run?.label || chart.runId,
+    feature: orderIndex(featureOrder, chart.feature),
+    featureName: chart.feature,
+  };
+}
+
+function sortSelectedCharts() {
+  state.selectedCharts.sort((a, b) => {
+    const ka = chartSortKey(a);
+    const kb = chartSortKey(b);
+    return ka.family - kb.family
+      || ka.feature - kb.feature
+      || ka.featureName.localeCompare(kb.featureName)
+      || ka.runIndex - kb.runIndex
+      || ka.runLabel.localeCompare(kb.runLabel);
+  });
 }
 
 const familyLabels = {
@@ -45,6 +88,10 @@ const colors = [
   "#0369a1", "#a16207"
 ];
 
+const timestepPalette = ["#173b66", "#2f6f8f", "#82a782", "#f3df58"];
+const softSpacingGamma = 0.55;
+const spacingEpsilon = 1e-9;
+
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
@@ -55,6 +102,192 @@ function el(tag, attrs = {}, children = []) {
   }
   for (const child of children) node.appendChild(child);
   return node;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hexToRgb(hex) {
+  const value = hex.replace("#", "");
+  return [
+    parseInt(value.slice(0, 2), 16),
+    parseInt(value.slice(2, 4), 16),
+    parseInt(value.slice(4, 6), 16),
+  ];
+}
+
+function rgbToHex(rgb) {
+  return `#${rgb.map((value) =>
+    Math.round(value).toString(16).padStart(2, "0")
+  ).join("")}`;
+}
+
+function interpolateColor(startHex, endHex, t) {
+  const start = hexToRgb(startHex);
+  const end = hexToRgb(endHex);
+  return rgbToHex(start.map((value, i) => value + (end[i] - value) * t));
+}
+
+function interpolatePalette(palette, t) {
+  const scaled = clamp(t, 0, 1) * (palette.length - 1);
+  const index = Math.min(palette.length - 2, Math.floor(scaled));
+  return interpolateColor(palette[index], palette[index + 1], scaled - index);
+}
+
+function numericValue(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function getPointTimestep(point) {
+  return numericValue(point.frame) ?? numericValue(point.progress) ?? numericValue(point.anchor);
+}
+
+function getEpisodeTimestepBounds(points) {
+  const boundsBySeq = new Map();
+  for (const point of points) {
+    const value = getPointTimestep(point);
+    if (value === null) continue;
+    const bounds = boundsBySeq.get(point.seq) || { min: Infinity, max: -Infinity };
+    bounds.min = Math.min(bounds.min, value);
+    bounds.max = Math.max(bounds.max, value);
+    boundsBySeq.set(point.seq, bounds);
+  }
+  for (const [seqId, bounds] of boundsBySeq) {
+    if (bounds.min === Infinity) {
+      boundsBySeq.delete(seqId);
+    }
+  }
+  return boundsBySeq;
+}
+
+function getTimestepColor(point, bounds) {
+  const value = getPointTimestep(point);
+  if (value === null || !bounds) return timestepPalette[0];
+  const span = bounds.max - bounds.min;
+  const t = span > 0 ? (value - bounds.min) / span : 0;
+  return interpolatePalette(timestepPalette, t);
+}
+
+function getPointColor(point, seq, timestepBounds) {
+  if (state.colorMode === "timestep") return getTimestepColor(point, timestepBounds);
+  return colors[seq.task_id % colors.length];
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function getTemporalStepDistances(points) {
+  const distances = [];
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const distance = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+    if (distance > spacingEpsilon) distances.push(distance);
+  }
+  return distances;
+}
+
+function getPathLength(points) {
+  return getTemporalStepDistances(points).reduce((sum, distance) => sum + distance, 0);
+}
+
+function preserveEpisodePathScale(originalPoints, adjustedPoints) {
+  const originalLength = getPathLength(originalPoints);
+  const adjustedLength = getPathLength(adjustedPoints);
+  if (originalLength <= spacingEpsilon || adjustedLength <= spacingEpsilon) return adjustedPoints;
+  const scale = originalLength / adjustedLength;
+  const anchor = adjustedPoints[0];
+  return adjustedPoints.map((point) => ({
+    ...point,
+    x: anchor.x + (point.x - anchor.x) * scale,
+    y: anchor.y + (point.y - anchor.y) * scale,
+  }));
+}
+
+function getAdjustedStepDistance(distance, referenceDistance) {
+  if (distance <= spacingEpsilon || referenceDistance <= spacingEpsilon) return distance;
+  if (state.spacingMode === "equal") return referenceDistance;
+  if (state.spacingMode === "soft") {
+    return referenceDistance * Math.pow(distance / referenceDistance, softSpacingGamma);
+  }
+  return distance;
+}
+
+function applyTemporalSpacing(points) {
+  if (state.spacingMode === "original") return points;
+  const bySeq = new Map();
+  for (const point of points) {
+    if (!bySeq.has(point.seq)) bySeq.set(point.seq, []);
+    bySeq.get(point.seq).push(point);
+  }
+
+  const adjustedByPoint = new Map();
+  for (const seqPoints of bySeq.values()) {
+    seqPoints.sort((a, b) => a.anchor - b.anchor);
+    const referenceDistance = median(getTemporalStepDistances(seqPoints));
+    const adjustedSeqPoints = [];
+    if (seqPoints.length) adjustedSeqPoints.push({ ...seqPoints[0] });
+
+    for (let i = 1; i < seqPoints.length; i++) {
+      const prevOriginal = seqPoints[i - 1];
+      const currOriginal = seqPoints[i];
+      const prevAdjusted = adjustedSeqPoints[i - 1];
+      const dx = currOriginal.x - prevOriginal.x;
+      const dy = currOriginal.y - prevOriginal.y;
+      const distance = Math.hypot(dx, dy);
+      if (!prevAdjusted || referenceDistance <= spacingEpsilon) {
+        adjustedSeqPoints.push({ ...currOriginal });
+        continue;
+      }
+      if (distance <= spacingEpsilon) {
+        adjustedSeqPoints.push({
+          ...currOriginal,
+          x: prevAdjusted.x,
+          y: prevAdjusted.y,
+        });
+        continue;
+      }
+      const adjustedDistance = getAdjustedStepDistance(distance, referenceDistance);
+      adjustedSeqPoints.push({
+        ...currOriginal,
+        x: prevAdjusted.x + (dx / distance) * adjustedDistance,
+        y: prevAdjusted.y + (dy / distance) * adjustedDistance,
+      });
+    }
+    const scaledSeqPoints = preserveEpisodePathScale(seqPoints, adjustedSeqPoints);
+    seqPoints.forEach((point, index) => {
+      adjustedByPoint.set(point, scaledSeqPoints[index]);
+    });
+  }
+  return points.map((point) => adjustedByPoint.get(point) || point);
+}
+
+function sequenceKey(seq) {
+  return `${seq.task_name}\u0000${seq.description}`;
+}
+
+function getVisibleSequenceKeys() {
+  const sequences = state.sequences?.sequences || [];
+  const keys = new Set();
+  for (const seq of sequences) {
+    if (state.visibleSeqs.has(seq.seq_id)) keys.add(sequenceKey(seq));
+  }
+  return keys;
+}
+
+function isSequenceVisibleForRun(runId, seqId, visibleKeys = getVisibleSequenceKeys()) {
+  if (runId === state.activeRunId) return state.visibleSeqs.has(seqId);
+  const sequences = state.sequencesByRunId.get(runId);
+  const seq = sequences?.sequences?.[seqId];
+  if (!seq) return false;
+  return visibleKeys.has(sequenceKey(seq));
 }
 
 async function fetchJson(path) {
@@ -200,7 +433,8 @@ function attachPanelResize() {
 
 function renderSidebar() {
   const sidebar = document.querySelector(".sidebar");
-  const families = state.catalog.families || ["baseline", "MGD", "RKD"];
+  const families = [...(state.catalog.families || familyOrder)]
+    .sort((a, b) => orderIndex(familyOrder, a) - orderIndex(familyOrder, b));
   const familyButtons = families.map((family) =>
     el("button", {
       class: `family-btn${family === state.family ? " active" : ""}`,
@@ -246,6 +480,7 @@ function renderEmpty() {
 
 async function loadRun(run, options = {}) {
   const isFirstChart = !state.selectedCharts.length;
+  const previousVisibleKeys = getVisibleSequenceKeys();
   state.run = run;
   state.activeRunId = run.id;
   renderSidebar();
@@ -257,11 +492,20 @@ async function loadRun(run, options = {}) {
   if (isFirstChart) {
     state.visibleSeqs = new Set(state.sequences.sequences.map((seq) => seq.seq_id));
     state.openTasks = new Set();
+  } else {
+    state.visibleSeqs = new Set(
+      state.sequences.sequences
+        .filter((seq) => previousVisibleKeys.has(sequenceKey(seq)))
+        .map((seq) => seq.seq_id)
+    );
+    if (!state.visibleSeqs.size) {
+      state.visibleSeqs = new Set(state.sequences.sequences.map((seq) => seq.seq_id));
+    }
   }
   const preferred = state.preferredFeatures.filter((feature) =>
     state.runManifest.features.includes(feature)
   );
-  if (!state.selectedCharts.some((chart) => chart.runId === run.id)) {
+  if (isFirstChart && !state.selectedCharts.some((chart) => chart.runId === run.id)) {
     const feature = preferred[0] || state.runManifest.features[0];
     state.selectedCharts.push({ runId: run.id, feature });
   }
@@ -360,6 +604,7 @@ function removeChartSelection(runId, feature) {
 }
 
 function renderViewer() {
+  sortSelectedCharts();
   ensureSelectedPoint(true);
   renderTabs();
   renderCharts();
@@ -367,13 +612,19 @@ function renderViewer() {
 }
 
 function ensureSelectedPoint(allowReplace = false) {
-  if (state.selected && state.visibleSeqs.has(state.selected.seq)) return;
+  const selectedRunIsShown = state.selectedCharts.some((chart) => chart.runId === state.selected?.runId);
+  if (
+    state.selected
+    && selectedRunIsShown
+    && isSequenceVisibleForRun(state.selected.runId, state.selected.seq)
+  ) return;
   if (state.selected && !allowReplace) return;
   const chart = state.selectedCharts[0];
   if (!chart) return;
   const pointPayload = state.pointsByChart.get(chartKey(chart.runId, chart.feature));
   if (!pointPayload || !pointPayload.points?.length) return;
-  const first = pointPayload.points.find((row) => state.visibleSeqs.has(row[2]));
+  const visibleKeys = getVisibleSequenceKeys();
+  const first = pointPayload.points.find((row) => isSequenceVisibleForRun(chart.runId, row[2], visibleKeys));
   if (!first) {
     state.selected = null;
     return;
@@ -391,6 +642,8 @@ function renderTabs() {
   const activeRun = getRunById(state.activeRunId);
   const activeManifest = state.activeRunId ? state.runManifestsById.get(state.activeRunId) : null;
   const features = activeManifest?.features || state.runManifest?.features || [];
+  const colorControls = renderColorControls();
+  const spacingControls = renderSpacingControls();
   const zoomControls = el("div", { class: "zoom-controls" }, [
     el("button", {
       class: `mini-btn zoom-btn pan-toggle${state.panMode ? " active" : ""}`,
@@ -432,11 +685,97 @@ function renderTabs() {
       })
     )
   );
-  const toolbar = el("div", { class: "stage-toolbar" }, [tabs, zoomControls]);
+  const toolbar = el("div", { class: "stage-toolbar" }, [
+    tabs,
+    el("div", { class: "chart-controls" }, [colorControls, spacingControls, zoomControls]),
+  ]);
   document.querySelector(".stage").innerHTML = "";
   renderVideoStrip(document.querySelector(".stage"));
   document.querySelector(".stage").appendChild(toolbar);
   document.querySelector(".stage").appendChild(el("div", { class: "chart-grid" }));
+}
+
+function renderColorControls() {
+  const controls = el("div", { class: "color-controls" }, [
+    el("div", { class: "color-mode-toggle" }, [
+      el("button", {
+        class: `mini-btn color-mode-btn${state.colorMode === "task" ? " active" : ""}`,
+        text: "Task",
+        title: "Color points by task",
+        onclick: () => setColorMode("task"),
+      }),
+      el("button", {
+        class: `mini-btn color-mode-btn${state.colorMode === "timestep" ? " active" : ""}`,
+        text: "Timestep",
+        title: "Color points by timestep",
+        onclick: () => setColorMode("timestep"),
+      }),
+    ]),
+  ]);
+  if (state.colorMode === "timestep") {
+    controls.appendChild(renderTimestepLegend());
+  }
+  return controls;
+}
+
+function renderTimestepLegend() {
+  return el("div", { class: "timestep-legend", title: "Timestep color scale" }, [
+    el("div", { class: "timestep-legend-title", text: "Episode timestep" }),
+    el("div", { class: "timestep-ramp" }),
+    el("div", { class: "timestep-ticks" }, [
+      el("span", { text: "start" }),
+      el("span", { text: "mid" }),
+      el("span", { text: "end" }),
+    ]),
+  ]);
+}
+
+function setColorMode(mode) {
+  if (state.colorMode === mode) return;
+  state.colorMode = mode;
+  renderTabs();
+  renderCharts();
+}
+
+function renderSpacingControls() {
+  return el("div", { class: "spacing-controls" }, [
+    el("div", { class: "spacing-mode-toggle" }, [
+      el("button", {
+        class: `mini-btn spacing-mode-btn${state.spacingMode === "original" ? " active" : ""}`,
+        text: "Original",
+        title: "Use original t-SNE distances",
+        onclick: () => setSpacingMode("original"),
+      }),
+      el("button", {
+        class: `mini-btn spacing-mode-btn${state.spacingMode === "soft" ? " active" : ""}`,
+        text: "Soft",
+        title: "Soft-normalize consecutive episode step distances",
+        onclick: () => setSpacingMode("soft"),
+      }),
+      el("button", {
+        class: `mini-btn spacing-mode-btn${state.spacingMode === "equal" ? " active" : ""}`,
+        text: "Equal",
+        title: "Make consecutive episode step distances equal",
+        onclick: () => setSpacingMode("equal"),
+      }),
+    ]),
+  ]);
+}
+
+function setSpacingMode(mode) {
+  if (state.spacingMode === mode) return;
+  state.spacingMode = mode;
+  resetSelectedChartViews();
+  renderTabs();
+  renderCharts();
+}
+
+function resetSelectedChartViews() {
+  for (const chart of state.selectedCharts) {
+    const chartState = getChartState(chartKey(chart.runId, chart.feature));
+    chartState.zoom = 1;
+    chartState.center = null;
+  }
 }
 
 async function toggleFeature(feature) {
@@ -591,6 +930,19 @@ function renderCharts() {
   }
 }
 
+function selectPoint(runId, point) {
+  state.selected = {
+    runId,
+    seq: point.seq,
+    anchor: point.anchor,
+    frame: point.frame,
+    progress: point.progress,
+  };
+  renderTabs();
+  renderCharts();
+  renderPanel();
+}
+
 function renderChart(runId, feature) {
   const key = chartKey(runId, feature);
   const wrap = document.querySelector(`.chart-wrap[data-chart="${key}"]`);
@@ -598,11 +950,12 @@ function renderChart(runId, feature) {
   const pointPayload = state.pointsByChart.get(key);
   if (!wrap || !pointPayload) return;
   const sequences = state.sequencesByRunId.get(runId);
-  const allPoints = pointPayload.points.map((row) => ({
+  const allPoints = applyTemporalSpacing(pointPayload.points.map((row) => ({
     x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
-  }));
-  const visiblePoints = allPoints.filter((point) => state.visibleSeqs.has(point.seq));
-  if (state.selected && !state.visibleSeqs.has(state.selected.seq)) {
+  })));
+  const visibleKeys = getVisibleSequenceKeys();
+  const visiblePoints = allPoints.filter((point) => isSequenceVisibleForRun(runId, point.seq, visibleKeys));
+  if (state.selected && !isSequenceVisibleForRun(state.selected.runId, state.selected.seq, visibleKeys)) {
     state.selected = null;
     ensureSelectedPoint(true);
   }
@@ -634,6 +987,7 @@ function renderChart(runId, feature) {
   bg.setAttribute("fill", "transparent");
   svg.appendChild(bg);
 
+  const episodeTimestepBounds = getEpisodeTimestepBounds(visiblePoints);
   const bySeq = new Map();
   for (const point of visiblePoints) {
     if (!bySeq.has(point.seq)) bySeq.set(point.seq, []);
@@ -642,36 +996,62 @@ function renderChart(runId, feature) {
   for (const [seqId, seqPoints] of bySeq) {
     seqPoints.sort((a, b) => a.anchor - b.anchor);
     const seq = sequences.sequences[seqId];
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    const d = seqPoints.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ");
-    path.setAttribute("d", d);
-    path.setAttribute("class", "path-line");
-    path.setAttribute("stroke", colors[seq.task_id % colors.length]);
-    svg.appendChild(path);
+    const seqKey = episodeKey(runId, seqId);
+    const area = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    area.setAttribute("d", getSequencePathD(seqPoints));
+    area.setAttribute("class", `episode-area${isFocusedEpisode(runId, seqId) ? " episode-active" : ""}`);
+    area.dataset.episodeKey = seqKey;
+    area.addEventListener("mouseenter", () => setHoveredEpisode(runId, seqId));
+    area.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
+    area.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"))
+      .textContent = `${seq.task_name}\n${seq.description}`;
+    svg.appendChild(area);
+  }
+  for (const [seqId, seqPoints] of bySeq) {
+    const seq = sequences.sequences[seqId];
+    const seqKey = episodeKey(runId, seqId);
+    if (state.colorMode === "timestep") {
+      for (let i = 1; i < seqPoints.length; i++) {
+        const prev = seqPoints[i - 1];
+        const curr = seqPoints[i];
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M${prev.x},${prev.y} L${curr.x},${curr.y}`);
+        path.setAttribute("class", "path-line timestep-path-line");
+        path.setAttribute("stroke", getTimestepColor(curr, episodeTimestepBounds.get(curr.seq)));
+        path.dataset.episodeKey = seqKey;
+        path.addEventListener("mouseenter", () => setHoveredEpisode(runId, seqId));
+        path.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
+        svg.appendChild(path);
+      }
+    } else {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", getSequencePathD(seqPoints));
+      path.setAttribute("class", "path-line");
+      path.setAttribute("stroke", colors[seq.task_id % colors.length]);
+      path.dataset.episodeKey = seqKey;
+      path.addEventListener("mouseenter", () => setHoveredEpisode(runId, seqId));
+      path.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
+      svg.appendChild(path);
+    }
   }
   for (const point of visiblePoints) {
     const chartPoint = { ...point, runId };
     const seq = sequences.sequences[point.seq];
-    const taskColor = colors[seq.task_id % colors.length];
+    const pointColor = getPointColor(point, seq, episodeTimestepBounds.get(point.seq));
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", point.x);
     c.setAttribute("cy", point.y);
     c.setAttribute("r", "0.55");
     c.setAttribute("class", "dot");
-    c.setAttribute("fill", taskColor);
+    c.setAttribute("fill", pointColor);
+    c.dataset.episodeKey = episodeKey(runId, point.seq);
     c.dataset.seq = String(point.seq);
     c.dataset.anchor = String(point.anchor);
     c.dataset.frame = String(point.frame);
+    c.addEventListener("mouseenter", () => setHoveredEpisode(runId, point.seq));
+    c.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
     c.addEventListener("click", () => {
-      state.selected = {
-        runId,
-        seq: point.seq,
-        anchor: point.anchor,
-        frame: point.frame,
-        progress: point.progress,
-      };
-      renderCharts();
-      renderPanel();
+      selectPoint(runId, point);
     });
     c.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"))
       .textContent = `${seq.task_name}\n${seq.description}\nframe ${point.frame}`;
@@ -681,13 +1061,23 @@ function renderChart(runId, feature) {
     const chartPoint = { ...point, runId };
     if (!isSelected(chartPoint)) continue;
     const seq = sequences.sequences[point.seq];
-    const taskColor = colors[seq.task_id % colors.length];
+    const pointColor = getPointColor(point, seq, episodeTimestepBounds.get(point.seq));
     const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     ring.setAttribute("cx", point.x);
     ring.setAttribute("cy", point.y);
     ring.setAttribute("r", "1.95");
     ring.setAttribute("class", "selected-ring");
-    ring.setAttribute("fill", taskColor);
+    ring.setAttribute("fill", pointColor);
+    ring.dataset.episodeKey = episodeKey(runId, point.seq);
+    ring.dataset.run = runId;
+    ring.dataset.seq = String(point.seq);
+    ring.dataset.anchor = String(point.anchor);
+    ring.dataset.frame = String(point.frame);
+    ring.addEventListener("mouseenter", () => setHoveredEpisode(runId, point.seq));
+    ring.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
+    ring.addEventListener("click", () => {
+      selectPoint(runId, point);
+    });
     svg.appendChild(ring);
 
     const center = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -696,6 +1086,16 @@ function renderChart(runId, feature) {
     center.setAttribute("r", "0.86");
     center.setAttribute("class", "dot selected");
     center.setAttribute("fill", "#ffffff");
+    center.dataset.episodeKey = episodeKey(runId, point.seq);
+    center.dataset.run = runId;
+    center.dataset.seq = String(point.seq);
+    center.dataset.anchor = String(point.anchor);
+    center.dataset.frame = String(point.frame);
+    center.addEventListener("mouseenter", () => setHoveredEpisode(runId, point.seq));
+    center.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
+    center.addEventListener("click", () => {
+      selectPoint(runId, point);
+    });
     svg.appendChild(center);
   }
   wrap.innerHTML = "";
@@ -805,9 +1205,39 @@ function attachChartPan(svg, runId, feature) {
 
 function isSelected(point) {
   return state.selected
+    && state.selected.runId === point.runId
     && state.selected.seq === point.seq
     && state.selected.anchor === point.anchor
     && state.selected.frame === point.frame;
+}
+
+function getSelectedEpisodeKey() {
+  return state.selected ? episodeKey(state.selected.runId, state.selected.seq) : null;
+}
+
+function isFocusedEpisode(runId, seqId) {
+  const key = episodeKey(runId, seqId);
+  return key === state.hoveredEpisodeKey || key === getSelectedEpisodeKey();
+}
+
+function updateEpisodeFocus() {
+  const selectedKey = getSelectedEpisodeKey();
+  const focusedKey = state.hoveredEpisodeKey || selectedKey;
+  document.querySelectorAll("[data-episode-key]").forEach((node) => {
+    const key = node.dataset.episodeKey;
+    node.classList.toggle("episode-hovered", Boolean(state.hoveredEpisodeKey && key === state.hoveredEpisodeKey));
+    node.classList.toggle("episode-active", Boolean(selectedKey && key === selectedKey));
+    node.classList.toggle("episode-dimmed", Boolean(focusedKey && key !== focusedKey));
+  });
+}
+
+function setHoveredEpisode(runId, seqId) {
+  state.hoveredEpisodeKey = runId === null ? null : episodeKey(runId, seqId);
+  updateEpisodeFocus();
+}
+
+function getSequencePathD(seqPoints) {
+  return seqPoints.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ");
 }
 
 function getCurrentFeaturePoints() {
@@ -940,7 +1370,11 @@ function renderTaskDescriptionPanel(panel) {
 
   const taskPanel = el("div", { class: "task-panel" });
   for (const [taskName, taskSeqs] of [...byTask.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    taskSeqs.sort((a, b) => a.description.localeCompare(b.description));
+    taskSeqs.sort((a, b) =>
+      a.description.localeCompare(b.description)
+      || a.episode_index - b.episode_index
+      || a.seq_id - b.seq_id
+    );
     const visibleCount = taskSeqs.filter((seq) => state.visibleSeqs.has(seq.seq_id)).length;
     const isOpen = state.openTasks.has(taskName);
     const taskButton = el("button", {
@@ -974,20 +1408,46 @@ function renderTaskDescriptionPanel(panel) {
       },
     });
     const descList = el("div", { class: `desc-list${isOpen ? " open" : ""}` });
+    const byDescription = new Map();
     for (const seq of taskSeqs) {
-      const visible = state.visibleSeqs.has(seq.seq_id);
-      descList.appendChild(el("button", {
-        class: `desc-toggle${visible ? " active" : " inactive"}`,
-        text: seq.description,
+      if (!byDescription.has(seq.description)) byDescription.set(seq.description, []);
+      byDescription.get(seq.description).push(seq);
+    }
+    for (const [description, descSeqs] of byDescription) {
+      const descVisibleCount = descSeqs.filter((seq) => state.visibleSeqs.has(seq.seq_id)).length;
+      const descButton = el("button", {
+        class: `desc-toggle${descVisibleCount ? " active" : " inactive"}${descVisibleCount && descVisibleCount < descSeqs.length ? " partial" : ""}`,
+        text: description,
+        title: `Show all ${descSeqs.length} matching description episode${descSeqs.length === 1 ? "" : "s"}`,
         onmousedown: (event) => event.preventDefault(),
         onclick: () => {
           preserveTaskPanelScroll();
-          if (state.visibleSeqs.has(seq.seq_id)) state.visibleSeqs.delete(seq.seq_id);
-          else state.visibleSeqs.add(seq.seq_id);
+          for (const seq of descSeqs) state.visibleSeqs.add(seq.seq_id);
           ensureSelectedPoint(true);
           renderViewer();
         },
-      }));
+      });
+      const episodeButtons = descSeqs.map((seq, index) => {
+        const visible = state.visibleSeqs.has(seq.seq_id);
+        return el("button", {
+          class: `desc-episode-toggle${visible ? " active" : " inactive"}`,
+          text: String(index + 1),
+          title: `Episode ${seq.episode_index}`,
+          onmousedown: (event) => event.preventDefault(),
+          onclick: (event) => {
+            event.stopPropagation();
+            preserveTaskPanelScroll();
+            if (state.visibleSeqs.has(seq.seq_id)) state.visibleSeqs.delete(seq.seq_id);
+            else state.visibleSeqs.add(seq.seq_id);
+            ensureSelectedPoint(true);
+            renderViewer();
+          },
+        });
+      });
+      descList.appendChild(el("div", { class: "desc-group" }, [
+        descButton,
+        el("div", { class: "desc-episodes" }, episodeButtons),
+      ]));
     }
     taskPanel.appendChild(el("div", { class: "task-accordion" }, [
       el("div", { class: "task-row" }, [taskButton, toggleButton]),
