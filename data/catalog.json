@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "families": [
     "baseline",
     "MGD",
@@ -7,45 +7,73 @@
   ],
   "runs": [
     {
-      "id": "rkd_v2a_phase2",
+      "id": "rkd_v2_1_a_phase2_frame",
       "family": "RKD",
-      "label": "RKD_v2A_phase2",
-      "path": "runs/rkd_v2a_phase2",
-      "manifest_id": "37464d1699",
+      "label": "RKD_v2.1_A_phase2_frame",
+      "path": "runs/rkd_v2_1_a_phase2_frame",
+      "manifest_id": "f0367e9630",
       "features": [
+        "raw",
         "processed",
         "action"
       ]
     },
     {
-      "id": "rkd_v2a_phase3",
+      "id": "rkd_v2_1_a_phase3_frame",
       "family": "RKD",
-      "label": "RKD_v2A_phase3",
-      "path": "runs/rkd_v2a_phase3",
-      "manifest_id": "37464d1699",
+      "label": "RKD_v2.1_A_phase3_frame",
+      "path": "runs/rkd_v2_1_a_phase3_frame",
+      "manifest_id": "f0367e9630",
       "features": [
+        "raw",
         "processed",
         "action"
       ]
     },
     {
-      "id": "baseline_checkpoint_120000",
-      "family": "baseline",
-      "label": "baseline_checkpoint_120000",
-      "path": "runs/baseline_checkpoint_120000",
-      "manifest_id": "37464d1699",
+      "id": "rkd_v2_1_da_phase2_frame",
+      "family": "RKD",
+      "label": "RKD_v2.1_DA_phase2_frame",
+      "path": "runs/rkd_v2_1_da_phase2_frame",
+      "manifest_id": "f0367e9630",
       "features": [
+        "raw",
         "processed",
         "action"
       ]
     },
     {
-      "id": "baseline_checkpoint_60000",
-      "family": "baseline",
-      "label": "baseline_checkpoint_60000",
-      "path": "runs/baseline_checkpoint_60000",
-      "manifest_id": "37464d1699",
+      "id": "rkd_v2_1_da_phase3_frame",
+      "family": "RKD",
+      "label": "RKD_v2.1_DA_phase3_frame",
+      "path": "runs/rkd_v2_1_da_phase3_frame",
+      "manifest_id": "f0367e9630",
       "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "baseline_checkpoint_120000_frame",
+      "family": "baseline",
+      "label": "baseline_checkpoint_120000_frame",
+      "path": "runs/baseline_checkpoint_120000_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "baseline_checkpoint_60000_frame",
+      "family": "baseline",
+      "label": "baseline_checkpoint_60000_frame",
+      "path": "runs/baseline_checkpoint_60000_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
         "processed",
         "action"
       ]

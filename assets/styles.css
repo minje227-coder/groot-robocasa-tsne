@@ -102,13 +102,14 @@ body.resizing-panel {
   user-select: none;
 }
 
+.version-grid,
 .family-grid {
   display: grid;
   gap: 10px;
   margin-bottom: 18px;
 }
 
-.family-btn, .run-btn, .tab-btn, .cam-btn {
+.version-btn, .family-btn, .run-btn, .tab-btn, .cam-btn {
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink);
@@ -119,12 +120,33 @@ body.resizing-panel {
   cursor: pointer;
 }
 
-.family-btn.active, .run-btn.active, .tab-btn.active, .cam-btn.active {
+.version-btn.active, .family-btn.active, .run-btn.active, .tab-btn.active, .cam-btn.active {
   border-color: #064f8f;
   background: #cfe8ff;
   box-shadow: inset 4px 0 0 #064f8f, 0 0 0 1px rgba(6, 79, 143, 0.12);
   color: #082f49;
   font-weight: 700;
+}
+
+.version-home {
+  max-width: 720px;
+  margin: 24px auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.version-home h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.version-actions {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0;
+  flex-wrap: wrap;
 }
 
 .run-btn.selected:not(.active) {

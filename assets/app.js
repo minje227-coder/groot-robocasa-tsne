@@ -1,5 +1,7 @@
 const state = {
   catalog: null,
+  catalogVersion: "v2",
+  catalogsByVersion: new Map(),
   family: "baseline",
   run: null,
   runManifest: null,
@@ -79,6 +81,51 @@ const familyLabels = {
   MGD: "MGD",
   RKD: "RKD",
 };
+
+const versionLabels = {
+  v1: "v1 episode",
+  v2: "v2 frame",
+};
+
+function catalogPath(version) {
+  return version === "v1" ? "./data/catalog_v1.json" : "./data/catalog.json";
+}
+
+function versionHashParams(extra = {}) {
+  return new URLSearchParams({
+    version: state.catalogVersion,
+    ...extra,
+  }).toString();
+}
+
+function resetRunState() {
+  state.run = null;
+  state.runManifest = null;
+  state.sequences = null;
+  state.activeRunId = null;
+  state.runManifestsById.clear();
+  state.sequencesByRunId.clear();
+  state.pointsByChart.clear();
+  state.selectedCharts = [];
+  state.preferredFeatures = [];
+  state.selected = null;
+  state.visibleSeqs = new Set();
+  state.openTasks = new Set();
+  state.hoveredEpisodeKey = null;
+  state.chartStates.clear();
+}
+
+async function loadCatalogVersion(version) {
+  const nextVersion = versionLabels[version] ? version : "v2";
+  if (!state.catalogsByVersion.has(nextVersion)) {
+    state.catalogsByVersion.set(nextVersion, await fetchJson(catalogPath(nextVersion)));
+  }
+  if (state.catalogVersion !== nextVersion) {
+    resetRunState();
+  }
+  state.catalogVersion = nextVersion;
+  state.catalog = state.catalogsByVersion.get(nextVersion);
+}
 
 const colors = [
   "#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2",
@@ -300,7 +347,8 @@ async function init() {
   renderShell();
   attachPanelResize();
   try {
-    state.catalog = await fetchJson("./data/catalog.json");
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+    await loadCatalogVersion(hash.get("version") || "v2");
     await applyHash();
     window.addEventListener("hashchange", applyHash);
     window.setInterval(() => {
@@ -312,9 +360,10 @@ async function init() {
 }
 
 async function applyHash() {
-  if (!state.catalog) return;
   state.lastHash = location.hash;
   const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  await loadCatalogVersion(hash.get("version") || "v2");
+  if (!state.catalog) return;
   const family = hash.get("family") || "baseline";
   const runId = hash.get("run");
   state.family = family;
@@ -441,7 +490,7 @@ function renderSidebar() {
       text: familyLabels[family] || family,
       onclick: () => {
         state.family = family;
-        location.hash = `family=${encodeURIComponent(family)}`;
+        location.hash = versionHashParams({ family });
         renderSidebar();
         if (state.selectedCharts.length) renderViewer();
         else renderEmpty();
@@ -461,6 +510,16 @@ function renderSidebar() {
   });
 
   sidebar.innerHTML = "";
+  sidebar.appendChild(el("h2", { text: "Version" }));
+  sidebar.appendChild(el("div", { class: "version-grid" }, Object.keys(versionLabels).map((version) =>
+    el("button", {
+      class: `version-btn${state.catalogVersion === version ? " active" : ""}`,
+      text: versionLabels[version],
+      onclick: () => {
+        location.hash = new URLSearchParams({ version }).toString();
+      },
+    })
+  )));
   sidebar.appendChild(el("h2", { text: "Family" }));
   sidebar.appendChild(el("div", { class: "family-grid" }, familyButtons));
   sidebar.appendChild(el("h2", { text: "Runs" }));
@@ -474,7 +533,29 @@ function renderSidebar() {
 }
 
 function renderEmpty() {
-  document.querySelector(".stage").innerHTML = `<div class="chart-wrap"><p class="status">Select a run.</p></div>`;
+  document.querySelector(".stage").innerHTML = "";
+  const stage = document.querySelector(".stage");
+  stage.appendChild(el("div", { class: "version-home" }, [
+    el("h2", { text: state.catalogVersion === "v1" ? "v1 episode t-SNE" : "v2 frame t-SNE" }),
+    el("p", {
+      text: state.catalogVersion === "v1"
+        ? "Episode-anchor runs are preserved here."
+        : "Description-balanced frame-sampled runs appear here.",
+    }),
+    el("div", { class: "version-actions" }, [
+      el("button", {
+        class: `version-btn${state.catalogVersion === "v2" ? " active" : ""}`,
+        text: "v2 frame",
+        onclick: () => { location.hash = "version=v2"; },
+      }),
+      el("button", {
+        class: `version-btn${state.catalogVersion === "v1" ? " active" : ""}`,
+        text: "v1 episode",
+        onclick: () => { location.hash = "version=v1"; },
+      }),
+    ]),
+    el("p", { class: "status", text: "Select a run from the sidebar." }),
+  ]));
   document.querySelector(".panel").innerHTML = "";
 }
 
@@ -511,7 +592,7 @@ async function loadRun(run, options = {}) {
   }
   state.preferredFeatures = getSelectedFeaturesForRun(run.id);
   if (options.updateHash !== false) {
-    location.hash = `family=${encodeURIComponent(run.family)}&run=${encodeURIComponent(run.id)}`;
+    location.hash = versionHashParams({ family: run.family, run: run.id });
   }
   await Promise.all(state.selectedCharts.map((chart) => loadChartData(chart.runId, chart.feature)));
   ensureSelectedPoint(true);
@@ -568,7 +649,7 @@ function removeRunCharts(runId) {
     state.openTasks = new Set();
     renderSidebar();
     renderEmpty();
-    location.hash = `family=${encodeURIComponent(state.family)}`;
+    location.hash = versionHashParams({ family: state.family });
     return;
   }
   if (state.activeRunId === runId) {
@@ -582,7 +663,7 @@ function removeRunCharts(runId) {
   ensureSelectedPoint(true);
   renderSidebar();
   renderViewer();
-  location.hash = `family=${encodeURIComponent(state.family)}&run=${encodeURIComponent(state.activeRunId)}`;
+  location.hash = versionHashParams({ family: state.family, run: state.activeRunId });
 }
 
 function removeChartSelection(runId, feature) {
