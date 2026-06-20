@@ -1474,6 +1474,7 @@ function renderPanel() {
 
 function renderTaskDescriptionPanel(panel) {
   const sequences = state.sequences ? state.sequences.sequences : [];
+  const isFrameVersion = state.catalogVersion === "v2";
   const byTask = new Map();
   for (const seq of sequences) {
     if (!byTask.has(seq.task_name)) byTask.set(seq.task_name, []);
@@ -1556,11 +1557,15 @@ function renderTaskDescriptionPanel(panel) {
       const descButton = el("button", {
         class: `desc-toggle${descVisibleCount ? " active" : " inactive"}${descVisibleCount && descVisibleCount < descSeqs.length ? " partial" : ""}`,
         text: description,
-        title: `Show all ${descSeqs.length} matching description episode${descSeqs.length === 1 ? "" : "s"}`,
+        title: `${isFrameVersion && descVisibleCount === descSeqs.length ? "Hide" : "Show"} all ${descSeqs.length} matching description episode${descSeqs.length === 1 ? "" : "s"}`,
         onmousedown: (event) => event.preventDefault(),
         onclick: () => {
           preserveTaskPanelScroll();
-          for (const seq of descSeqs) state.visibleSeqs.add(seq.seq_id);
+          const nextOn = !isFrameVersion || descVisibleCount !== descSeqs.length;
+          for (const seq of descSeqs) {
+            if (nextOn) state.visibleSeqs.add(seq.seq_id);
+            else state.visibleSeqs.delete(seq.seq_id);
+          }
           ensureSelectedPoint(true);
           renderViewer();
         },
@@ -1582,10 +1587,9 @@ function renderTaskDescriptionPanel(panel) {
           },
         });
       });
-      descList.appendChild(el("div", { class: "desc-group" }, [
-        descButton,
-        el("div", { class: "desc-episodes" }, episodeButtons),
-      ]));
+      const descChildren = [descButton];
+      if (!isFrameVersion) descChildren.push(el("div", { class: "desc-episodes" }, episodeButtons));
+      descList.appendChild(el("div", { class: "desc-group" }, descChildren));
     }
     taskPanel.appendChild(el("div", { class: "task-accordion" }, [
       el("div", { class: "task-row" }, [taskButton, toggleButton]),
