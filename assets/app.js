@@ -187,37 +187,28 @@ function numericValue(value) {
 }
 
 function getPointTimestep(point) {
-  return numericValue(point.frame) ?? numericValue(point.progress) ?? numericValue(point.anchor);
+  return numericValue(point.frame) ?? numericValue(point.anchor);
 }
 
-function getEpisodeTimestepBounds(points) {
-  const boundsBySeq = new Map();
-  for (const point of points) {
-    const value = getPointTimestep(point);
-    if (value === null) continue;
-    const bounds = boundsBySeq.get(point.seq) || { min: Infinity, max: -Infinity };
-    bounds.min = Math.min(bounds.min, value);
-    bounds.max = Math.max(bounds.max, value);
-    boundsBySeq.set(point.seq, bounds);
+function getPointTimestepProgress(point, seq) {
+  const frame = getPointTimestep(point);
+  const episodeLength = numericValue(seq?.episode_length);
+  if (frame !== null && episodeLength !== null && episodeLength > 1) {
+    return clamp(frame / (episodeLength - 1), 0, 1);
   }
-  for (const [seqId, bounds] of boundsBySeq) {
-    if (bounds.min === Infinity) {
-      boundsBySeq.delete(seqId);
-    }
-  }
-  return boundsBySeq;
+  const progress = numericValue(point.progress);
+  if (progress !== null) return clamp(progress, 0, 1);
+  return null;
 }
 
-function getTimestepColor(point, bounds) {
-  const value = getPointTimestep(point);
-  if (value === null || !bounds) return timestepPalette[0];
-  const span = bounds.max - bounds.min;
-  const t = span > 0 ? (value - bounds.min) / span : 0;
+function getTimestepColor(point, seq) {
+  const t = getPointTimestepProgress(point, seq);
+  if (t === null) return timestepPalette[0];
   return interpolatePalette(timestepPalette, t);
 }
 
-function getPointColor(point, seq, timestepBounds) {
-  if (state.colorMode === "timestep") return getTimestepColor(point, timestepBounds);
+function getPointColor(point, seq) {
+  if (state.colorMode === "timestep") return getTimestepColor(point, seq);
   return colors[seq.task_id % colors.length];
 }
 
@@ -1068,7 +1059,6 @@ function renderChart(runId, feature) {
   bg.setAttribute("fill", "transparent");
   svg.appendChild(bg);
 
-  const episodeTimestepBounds = getEpisodeTimestepBounds(visiblePoints);
   const bySeq = new Map();
   for (const point of visiblePoints) {
     if (!bySeq.has(point.seq)) bySeq.set(point.seq, []);
@@ -1098,7 +1088,7 @@ function renderChart(runId, feature) {
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         path.setAttribute("d", `M${prev.x},${prev.y} L${curr.x},${curr.y}`);
         path.setAttribute("class", "path-line timestep-path-line");
-        path.setAttribute("stroke", getTimestepColor(curr, episodeTimestepBounds.get(curr.seq)));
+        path.setAttribute("stroke", getTimestepColor(curr, seq));
         path.dataset.episodeKey = seqKey;
         path.addEventListener("mouseenter", () => setHoveredEpisode(runId, seqId));
         path.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
@@ -1118,7 +1108,7 @@ function renderChart(runId, feature) {
   for (const point of visiblePoints) {
     const chartPoint = { ...point, runId };
     const seq = sequences.sequences[point.seq];
-    const pointColor = getPointColor(point, seq, episodeTimestepBounds.get(point.seq));
+    const pointColor = getPointColor(point, seq);
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", point.x);
     c.setAttribute("cy", point.y);
@@ -1142,7 +1132,7 @@ function renderChart(runId, feature) {
     const chartPoint = { ...point, runId };
     if (!isSelected(chartPoint)) continue;
     const seq = sequences.sequences[point.seq];
-    const pointColor = getPointColor(point, seq, episodeTimestepBounds.get(point.seq));
+    const pointColor = getPointColor(point, seq);
     const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     ring.setAttribute("cx", point.x);
     ring.setAttribute("cy", point.y);
