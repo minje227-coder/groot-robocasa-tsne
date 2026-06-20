@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "run_id": "baseline_checkpoint_120000",
+  "label": "baseline_checkpoint_120000",
+  "family": "baseline",
+  "checkpoint_dir": "/home/seonho/groot_robocasa/Atomic26_baseline/checkpoint-120000",
+  "policy_type": "baseline",
+  "manifest_id": "37464d1699",
+  "task_set": "my_atomic26",
+  "seed": 42,
+  "anchors_per_desc": 32,
+  "episodes_per_desc": 5,
+  "fps": 20,
+  "features": [
+    "processed",
+    "action"
+  ],
+  "sequences_file": "sequences.json",
+  "points_files": {
+    "processed": "points_processed.json",
+    "action": "points_action.json"
+  },
+  "points_3d_files": {
+    "processed": "points_processed_3d.json",
+    "action": "points_action_3d.json"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "run_id": "rkd_v2a_phase3",
+  "label": "RKD_v2A_phase3",
+  "family": "RKD",
+  "checkpoint_dir": "/home/ext_minje/groot_robocasa/robocasa_v2/rkd_v2/rkd_v2_angle/default/phase3",
+  "policy_type": "groot_rkd_v2",
+  "manifest_id": "86c0caa8be",
+  "task_set": "my_atomic26",
+  "seed": 42,
+  "anchors_per_desc": 32,
+  "fps": 20,
+  "features": [
+    "processed",
+    "action"
+  ],
+  "sequences_file": "sequences.json",
+  "points_files": {
+    "processed": "points_processed.json",
+    "action": "points_action.json"
+  }
+}
