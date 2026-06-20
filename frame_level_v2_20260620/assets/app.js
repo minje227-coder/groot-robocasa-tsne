@@ -36,6 +36,40 @@ function episodeKey(runId, seqId) {
   return `${runId}::${seqId}`;
 }
 
+function getSequencesForRun(runId) {
+  return state.sequencesByRunId.get(runId) || state.sequences;
+}
+
+function getSequenceById(runId, seqId) {
+  return getSequencesForRun(runId)?.sequences?.[seqId] || null;
+}
+
+function getEpisodeSelectionKey(runId, seqId) {
+  const seq = getSequenceById(runId, seqId);
+  if (!seq) return null;
+  const dataset = seq.dataset_rel_path || seq.task_name || "";
+  return `${dataset}::${seq.episode_index}`;
+}
+
+function getPointSelectionKey(runId, point) {
+  const episodeSelectionKey = getEpisodeSelectionKey(runId, point.seq);
+  const frame = numericValue(point.frame);
+  if (!episodeSelectionKey || frame === null) return null;
+  return `${episodeSelectionKey}::${frame}`;
+}
+
+function buildSelection(runId, point) {
+  return {
+    runId,
+    seq: point.seq,
+    anchor: point.anchor,
+    frame: point.frame,
+    progress: point.progress,
+    episodeSelectionKey: getEpisodeSelectionKey(runId, point.seq),
+    selectionKey: getPointSelectionKey(runId, point),
+  };
+}
+
 function getRunById(runId) {
   return state.catalog?.runs?.find((run) => run.id === runId) || null;
 }
@@ -905,23 +939,30 @@ function scaleSelectedCharts(factor) {
 
 function renderVideoStrip(stage) {
   if (!state.selected || !state.sequences) return;
-  const sequences = state.sequencesByRunId.get(state.selected.runId) || state.sequences;
+  const sequences = getSequencesForRun(state.selected.runId);
   const manifest = state.runManifestsById.get(state.selected.runId) || state.runManifest;
   const seq = sequences.sequences[state.selected.seq];
   if (!seq || !seq.videos) return;
   const cams = Object.keys(seq.videos);
   if (!cams.length) return;
-  const currentTime = Math.max(0, state.selected.frame / (manifest.fps || 20));
+  const fps = manifest.fps || 20;
+  const videoStartFrame = numericValue(seq.video_start_frame) ?? 0;
+  const currentTime = Math.max(0, (state.selected.frame - videoStartFrame) / fps);
   const cards = cams.map((cam) => {
     const video = el("video", {
+      autoplay: "autoplay",
       controls: "controls",
+      loop: "loop",
       muted: "muted",
       playsinline: "playsinline",
       src: `./${seq.videos[cam]}`,
     });
     video.dataset.syncVideo = "1";
     video.addEventListener("loadedmetadata", () => {
-      video.currentTime = currentTime;
+      const maxTime = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.05) : currentTime;
+      video.currentTime = Math.min(currentTime, maxTime);
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === "function") playPromise.catch(() => {});
     });
     video.addEventListener("play", () => syncVideosFrom(video, { syncPlayback: true }));
     video.addEventListener("pause", () => syncVideosFrom(video, { syncPlayback: true }));
@@ -1003,13 +1044,7 @@ function renderCharts() {
 }
 
 function selectPoint(runId, point) {
-  state.selected = {
-    runId,
-    seq: point.seq,
-    anchor: point.anchor,
-    frame: point.frame,
-    progress: point.progress,
-  };
+  state.selected = buildSelection(runId, point);
   renderTabs();
   renderCharts();
   renderPanel();
@@ -1068,10 +1103,12 @@ function renderChart(runId, feature) {
     seqPoints.sort((a, b) => a.anchor - b.anchor);
     const seq = sequences.sequences[seqId];
     const seqKey = episodeKey(runId, seqId);
+    const seqSelectionKey = getEpisodeSelectionKey(runId, seqId);
     const area = document.createElementNS("http://www.w3.org/2000/svg", "path");
     area.setAttribute("d", getSequencePathD(seqPoints));
     area.setAttribute("class", `episode-area${isFocusedEpisode(runId, seqId) ? " episode-active" : ""}`);
     area.dataset.episodeKey = seqKey;
+    if (seqSelectionKey) area.dataset.episodeSelectionKey = seqSelectionKey;
     area.addEventListener("mouseenter", () => setHoveredEpisode(runId, seqId));
     area.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
     area.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"))
@@ -1081,6 +1118,7 @@ function renderChart(runId, feature) {
   for (const [seqId, seqPoints] of bySeq) {
     const seq = sequences.sequences[seqId];
     const seqKey = episodeKey(runId, seqId);
+    const seqSelectionKey = getEpisodeSelectionKey(runId, seqId);
     if (state.colorMode === "timestep") {
       for (let i = 1; i < seqPoints.length; i++) {
         const prev = seqPoints[i - 1];
@@ -1090,6 +1128,7 @@ function renderChart(runId, feature) {
         path.setAttribute("class", "path-line timestep-path-line");
         path.setAttribute("stroke", getTimestepColor(curr, seq));
         path.dataset.episodeKey = seqKey;
+        if (seqSelectionKey) path.dataset.episodeSelectionKey = seqSelectionKey;
         path.addEventListener("mouseenter", () => setHoveredEpisode(runId, seqId));
         path.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
         svg.appendChild(path);
@@ -1100,6 +1139,7 @@ function renderChart(runId, feature) {
       path.setAttribute("class", "path-line");
       path.setAttribute("stroke", colors[seq.task_id % colors.length]);
       path.dataset.episodeKey = seqKey;
+      if (seqSelectionKey) path.dataset.episodeSelectionKey = seqSelectionKey;
       path.addEventListener("mouseenter", () => setHoveredEpisode(runId, seqId));
       path.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
       svg.appendChild(path);
@@ -1108,6 +1148,7 @@ function renderChart(runId, feature) {
   for (const point of visiblePoints) {
     const chartPoint = { ...point, runId };
     const seq = sequences.sequences[point.seq];
+    const seqSelectionKey = getEpisodeSelectionKey(runId, point.seq);
     const pointColor = getPointColor(point, seq);
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     c.setAttribute("cx", point.x);
@@ -1116,6 +1157,7 @@ function renderChart(runId, feature) {
     c.setAttribute("class", "dot");
     c.setAttribute("fill", pointColor);
     c.dataset.episodeKey = episodeKey(runId, point.seq);
+    if (seqSelectionKey) c.dataset.episodeSelectionKey = seqSelectionKey;
     c.dataset.seq = String(point.seq);
     c.dataset.anchor = String(point.anchor);
     c.dataset.frame = String(point.frame);
@@ -1132,6 +1174,7 @@ function renderChart(runId, feature) {
     const chartPoint = { ...point, runId };
     if (!isSelected(chartPoint)) continue;
     const seq = sequences.sequences[point.seq];
+    const seqSelectionKey = getEpisodeSelectionKey(runId, point.seq);
     const pointColor = getPointColor(point, seq);
     const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     ring.setAttribute("cx", point.x);
@@ -1140,6 +1183,7 @@ function renderChart(runId, feature) {
     ring.setAttribute("class", "selected-ring");
     ring.setAttribute("fill", pointColor);
     ring.dataset.episodeKey = episodeKey(runId, point.seq);
+    if (seqSelectionKey) ring.dataset.episodeSelectionKey = seqSelectionKey;
     ring.dataset.run = runId;
     ring.dataset.seq = String(point.seq);
     ring.dataset.anchor = String(point.anchor);
@@ -1158,6 +1202,7 @@ function renderChart(runId, feature) {
     center.setAttribute("class", "dot selected");
     center.setAttribute("fill", "#ffffff");
     center.dataset.episodeKey = episodeKey(runId, point.seq);
+    if (seqSelectionKey) center.dataset.episodeSelectionKey = seqSelectionKey;
     center.dataset.run = runId;
     center.dataset.seq = String(point.seq);
     center.dataset.anchor = String(point.anchor);
@@ -1275,6 +1320,10 @@ function attachChartPan(svg, runId, feature) {
 }
 
 function isSelected(point) {
+  const selectionKey = getPointSelectionKey(point.runId, point);
+  if (state.selected?.selectionKey && selectionKey) {
+    return state.selected.selectionKey === selectionKey;
+  }
   return state.selected
     && state.selected.runId === point.runId
     && state.selected.seq === point.seq
@@ -1286,19 +1335,35 @@ function getSelectedEpisodeKey() {
   return state.selected ? episodeKey(state.selected.runId, state.selected.seq) : null;
 }
 
+function getSelectedEpisodeSelectionKey() {
+  return state.selected?.episodeSelectionKey || null;
+}
+
 function isFocusedEpisode(runId, seqId) {
   const key = episodeKey(runId, seqId);
-  return key === state.hoveredEpisodeKey || key === getSelectedEpisodeKey();
+  const episodeSelectionKey = getEpisodeSelectionKey(runId, seqId);
+  return key === state.hoveredEpisodeKey
+    || key === getSelectedEpisodeKey()
+    || Boolean(episodeSelectionKey && episodeSelectionKey === getSelectedEpisodeSelectionKey());
 }
 
 function updateEpisodeFocus() {
   const selectedKey = getSelectedEpisodeKey();
+  const selectedEpisodeSelectionKey = getSelectedEpisodeSelectionKey();
   const focusedKey = state.hoveredEpisodeKey || selectedKey;
   document.querySelectorAll("[data-episode-key]").forEach((node) => {
     const key = node.dataset.episodeKey;
+    const episodeSelectionKey = node.dataset.episodeSelectionKey;
+    const selectedByManifest = Boolean(
+      selectedEpisodeSelectionKey && episodeSelectionKey === selectedEpisodeSelectionKey
+    );
     node.classList.toggle("episode-hovered", Boolean(state.hoveredEpisodeKey && key === state.hoveredEpisodeKey));
-    node.classList.toggle("episode-active", Boolean(selectedKey && key === selectedKey));
-    node.classList.toggle("episode-dimmed", Boolean(focusedKey && key !== focusedKey));
+    node.classList.toggle("episode-active", Boolean((selectedKey && key === selectedKey) || selectedByManifest));
+    node.classList.toggle("episode-dimmed", Boolean(
+      state.hoveredEpisodeKey
+        ? key !== focusedKey
+        : selectedEpisodeSelectionKey && !selectedByManifest
+    ));
   });
 }
 
@@ -1340,10 +1405,12 @@ function syncSelectionToVideo(video) {
   if (!state.selected) return;
   const manifest = state.runManifestsById.get(state.selected.runId) || state.runManifest;
   const fps = manifest.fps || 20;
-  const frame = Math.round(video.currentTime * fps);
+  const seq = getSequenceById(state.selected.runId, state.selected.seq);
+  const videoStartFrame = numericValue(seq?.video_start_frame) ?? 0;
+  const frame = Math.round(video.currentTime * fps) + videoStartFrame;
   const point = nearestPointForFrame(state.selected.seq, frame);
   if (!point || isSelected(point)) return;
-  state.selected = point;
+  state.selected = buildSelection(point.runId || state.selected.runId, point);
   updateSelectedMarker();
   updateSelectionFrame();
 }
