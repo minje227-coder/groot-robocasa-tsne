@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "run_id": "mgrkd_distance_angle_flatten_raw_action_phase2_frame",
+  "label": "MGRKD [DA, Raw action] Phase 2",
+  "family": "MGRKD",
+  "checkpoint_dir": "/home/ext_minje/groot_robocasa/robocasa_v2/MGRKD/mgrkd_distance_angle_flatten_raw_action/default/phase2",
+  "policy_type": "groot_mgrkd",
+  "manifest_id": "f0367e9630",
+  "task_set": "my_atomic26",
+  "seed": 42,
+  "sampling": "desc_random_frame",
+  "samples_per_desc": 100,
+  "pnp_descs_per_task": 5,
+  "action_horizon": 16,
+  "terminal_slack_frames": 8,
+  "fps": 20,
+  "features": [
+    "raw",
+    "processed",
+    "action"
+  ],
+  "sequences_file": "sequences.json",
+  "points_files": {
+    "raw": "points_raw.json",
+    "processed": "points_processed.json",
+    "action": "points_action.json"
+  }
+}

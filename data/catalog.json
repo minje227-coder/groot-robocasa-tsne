@@ -32,6 +32,18 @@
       ]
     },
     {
+      "id": "mgrkd_distance_angle_flatten_raw_action_phase2_frame",
+      "family": "MGRKD",
+      "label": "MGRKD [DA, Raw action] Phase 2",
+      "path": "runs/mgrkd_distance_angle_flatten_raw_action_phase2_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
       "id": "rkd_v2_1_a_phase2_frame",
       "family": "RKD",
       "label": "RKD_v2.1_A_phase2_frame",
