@@ -1,7 +1,5 @@
 const state = {
   catalog: null,
-  catalogVersion: "v2",
-  catalogsByVersion: new Map(),
   family: "baseline",
   run: null,
   runManifest: null,
@@ -13,6 +11,8 @@ const state = {
   selectedCharts: [],
   preferredFeatures: [],
   cam: "robot0_agentview_left",
+  selectionMode: "single",
+  selectedPoints: [],
   selected: null,
   visibleSeqs: new Set(),
   openTasks: new Set(),
@@ -20,7 +20,10 @@ const state = {
   syncingVideos: false,
   panelWidth: 360,
   panMode: false,
+  lassoMode: false,
+  lassoRegions: [],
   colorMode: "task",
+  timestepRange: [0, 1],
   spacingMode: "original",
   hoveredEpisodeKey: null,
   chartStates: new Map(),
@@ -58,6 +61,12 @@ function getPointSelectionKey(runId, point) {
   return `${episodeSelectionKey}::${frame}`;
 }
 
+function getPointGlobalKey(runId, point) {
+  const frame = numericValue(point.frame);
+  if (frame === null) return null;
+  return `${point.seq}::${frame}`;
+}
+
 function buildSelection(runId, point) {
   return {
     runId,
@@ -70,11 +79,46 @@ function buildSelection(runId, point) {
   };
 }
 
+function selectionKey(selection) {
+  return selection?.selectionKey
+    || `${selection?.runId}::${selection?.seq}::${selection?.anchor}::${selection?.frame}`;
+}
+
+function setSelectedPoints(points) {
+  state.selectedPoints = points;
+  state.selected = points[points.length - 1] || null;
+}
+
+function clearSelectedPoints() {
+  setSelectedPoints([]);
+}
+
+function removeSelectedPointsForRun(runId) {
+  setSelectedPoints(state.selectedPoints.filter((point) => point.runId !== runId));
+}
+
+function isSelectionVisible(selection) {
+  const seq = getSequenceById(selection.runId, selection.seq);
+  return isSequenceVisibleForRun(selection.runId, selection.seq)
+    && isPointInTimestepRange(selection, seq);
+}
+
+function getSelectionIndex(selection) {
+  const key = selectionKey(selection);
+  return state.selectedPoints.findIndex((point) => selectionKey(point) === key);
+}
+
+function getSelectionAccent(selection) {
+  const index = getSelectionIndex(selection);
+  if (state.selectionMode !== "multi" || index < 0) return "#facc15";
+  return selectionPalette[index % selectionPalette.length];
+}
+
 function getRunById(runId) {
   return state.catalog?.runs?.find((run) => run.id === runId) || null;
 }
 
-const familyOrder = ["baseline", "RKD", "MGD"];
+const familyOrder = ["baseline", "MGRKD", "RKD", "MGD"];
 const featureOrder = ["raw", "processed", "action"];
 
 function orderIndex(list, value) {
@@ -111,25 +155,14 @@ function sortSelectedCharts() {
 }
 
 const familyLabels = {
-  baseline: "baseline",
+  baseline: "Baseline",
   MGD: "MGD",
   RKD: "RKD",
+  MGRKD: "MGRKD",
 };
 
-const versionLabels = {
-  v1: "v1 episode",
-  v2: "v2 frame",
-};
-
-function catalogPath(version) {
-  return version === "v1" ? "./data/catalog_v1.json" : "./data/catalog.json";
-}
-
-function versionHashParams(extra = {}) {
-  return new URLSearchParams({
-    version: state.catalogVersion,
-    ...extra,
-  }).toString();
+function hashParams(extra = {}) {
+  return new URLSearchParams(extra).toString();
 }
 
 function resetRunState() {
@@ -142,23 +175,18 @@ function resetRunState() {
   state.pointsByChart.clear();
   state.selectedCharts = [];
   state.preferredFeatures = [];
-  state.selected = null;
+  clearSelectedPoints();
   state.visibleSeqs = new Set();
   state.openTasks = new Set();
   state.hoveredEpisodeKey = null;
+  state.lassoRegions = [];
   state.chartStates.clear();
 }
 
-async function loadCatalogVersion(version) {
-  const nextVersion = versionLabels[version] ? version : "v2";
-  if (!state.catalogsByVersion.has(nextVersion)) {
-    state.catalogsByVersion.set(nextVersion, await fetchJson(catalogPath(nextVersion)));
+async function loadCatalog() {
+  if (!state.catalog) {
+    state.catalog = await fetchJson("./data/catalog.json");
   }
-  if (state.catalogVersion !== nextVersion) {
-    resetRunState();
-  }
-  state.catalogVersion = nextVersion;
-  state.catalog = state.catalogsByVersion.get(nextVersion);
 }
 
 const colors = [
@@ -170,6 +198,19 @@ const colors = [
 ];
 
 const timestepPalette = ["#173b66", "#2f6f8f", "#82a782", "#f3df58"];
+const selectionPalette = ["#f9a8d4", "#93c5fd", "#86efac"];
+const lassoPalette = [
+  { fill: "rgba(147, 197, 253, 0.34)", stroke: "rgba(59, 130, 246, 0.68)" },
+  { fill: "rgba(249, 168, 212, 0.34)", stroke: "rgba(219, 39, 119, 0.64)" },
+  { fill: "rgba(134, 239, 172, 0.34)", stroke: "rgba(22, 163, 74, 0.62)" },
+  { fill: "rgba(253, 230, 138, 0.38)", stroke: "rgba(217, 119, 6, 0.66)" },
+  { fill: "rgba(196, 181, 253, 0.34)", stroke: "rgba(124, 58, 237, 0.62)" },
+  { fill: "rgba(125, 211, 252, 0.34)", stroke: "rgba(2, 132, 199, 0.64)" },
+  { fill: "rgba(252, 165, 165, 0.34)", stroke: "rgba(220, 38, 38, 0.62)" },
+  { fill: "rgba(167, 243, 208, 0.34)", stroke: "rgba(5, 150, 105, 0.62)" },
+  { fill: "rgba(253, 186, 116, 0.34)", stroke: "rgba(234, 88, 12, 0.62)" },
+  { fill: "rgba(216, 180, 254, 0.34)", stroke: "rgba(147, 51, 234, 0.62)" },
+];
 const softSpacingGamma = 0.55;
 const spacingEpsilon = 1e-9;
 
@@ -202,6 +243,11 @@ function rgbToHex(rgb) {
   return `#${rgb.map((value) =>
     Math.round(value).toString(16).padStart(2, "0")
   ).join("")}`;
+}
+
+function complementColor(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex || "")) return "#22d3ee";
+  return rgbToHex(hexToRgb(hex).map((value) => 255 - value));
 }
 
 function interpolateColor(startHex, endHex, t) {
@@ -243,7 +289,18 @@ function getTimestepColor(point, seq) {
 
 function getPointColor(point, seq) {
   if (state.colorMode === "timestep") return getTimestepColor(point, seq);
-  return colors[seq.task_id % colors.length];
+  return getTaskColor(seq);
+}
+
+function isPointInTimestepRange(point, seq) {
+  const t = getPointTimestepProgress(point, seq);
+  if (t === null) return true;
+  return t >= state.timestepRange[0] && t <= state.timestepRange[1];
+}
+
+function getTaskColor(seq) {
+  const taskId = Number.isFinite(seq?.task_id) ? seq.task_id : 0;
+  return colors[taskId % colors.length] || colors[0];
 }
 
 function median(values) {
@@ -372,8 +429,7 @@ async function init() {
   renderShell();
   attachPanelResize();
   try {
-    const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
-    await loadCatalogVersion(hash.get("version") || "v2");
+    await loadCatalog();
     await applyHash();
     window.addEventListener("hashchange", applyHash);
     window.setInterval(() => {
@@ -387,7 +443,13 @@ async function init() {
 async function applyHash() {
   state.lastHash = location.hash;
   const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
-  await loadCatalogVersion(hash.get("version") || "v2");
+  if (hash.has("version")) {
+    hash.delete("version");
+    const cleanHash = hash.toString();
+    history.replaceState(null, "", `${location.pathname}${location.search}${cleanHash ? `#${cleanHash}` : ""}`);
+    state.lastHash = location.hash;
+  }
+  await loadCatalog();
   if (!state.catalog) return;
   const family = hash.get("family") || "baseline";
   const runId = hash.get("run");
@@ -416,7 +478,7 @@ async function applyHash() {
     state.pointsByChart.clear();
     state.selectedCharts = [];
     state.chartStates.clear();
-    state.selected = null;
+    clearSelectedPoints();
     state.visibleSeqs = new Set();
     state.openTasks = new Set();
     renderSidebar();
@@ -515,7 +577,7 @@ function renderSidebar() {
       text: familyLabels[family] || family,
       onclick: () => {
         state.family = family;
-        location.hash = versionHashParams({ family });
+        location.hash = hashParams({ family });
         renderSidebar();
         if (state.selectedCharts.length) renderViewer();
         else renderEmpty();
@@ -525,26 +587,15 @@ function renderSidebar() {
   const runs = (state.catalog.runs || []).filter((run) => run.family === state.family);
   const runButtons = runs.map((run) => {
     const isShown = state.selectedCharts.some((chart) => chart.runId === run.id);
-    return el("button", {
-      class: `run-btn${state.activeRunId === run.id ? " active" : ""}${isShown ? " selected" : ""}`,
-      onclick: () => loadRun(run),
+    return el("div", {
+      class: `run-btn${isShown ? " selected" : ""}`,
     }, [
       el("strong", { text: run.label || run.id }),
-      el("span", { text: (run.features || []).join(" / ") }),
+      renderRunFeatureToggle(run),
     ]);
   });
 
   sidebar.innerHTML = "";
-  sidebar.appendChild(el("h2", { text: "Version" }));
-  sidebar.appendChild(el("div", { class: "version-grid" }, Object.keys(versionLabels).map((version) =>
-    el("button", {
-      class: `version-btn${state.catalogVersion === version ? " active" : ""}`,
-      text: versionLabels[version],
-      onclick: () => {
-        location.hash = new URLSearchParams({ version }).toString();
-      },
-    })
-  )));
   sidebar.appendChild(el("h2", { text: "Family" }));
   sidebar.appendChild(el("div", { class: "family-grid" }, familyButtons));
   sidebar.appendChild(el("h2", { text: "Runs" }));
@@ -560,28 +611,34 @@ function renderSidebar() {
 function renderEmpty() {
   document.querySelector(".stage").innerHTML = "";
   const stage = document.querySelector(".stage");
-  stage.appendChild(el("div", { class: "version-home" }, [
-    el("h2", { text: state.catalogVersion === "v1" ? "v1 episode t-SNE" : "v2 frame t-SNE" }),
-    el("p", {
-      text: state.catalogVersion === "v1"
-        ? "Episode-anchor runs are preserved here."
-        : "Description-balanced frame-sampled runs appear here.",
-    }),
-    el("div", { class: "version-actions" }, [
-      el("button", {
-        class: `version-btn${state.catalogVersion === "v2" ? " active" : ""}`,
-        text: "v2 frame",
-        onclick: () => { location.hash = "version=v2"; },
-      }),
-      el("button", {
-        class: `version-btn${state.catalogVersion === "v1" ? " active" : ""}`,
-        text: "v1 episode",
-        onclick: () => { location.hash = "version=v1"; },
-      }),
-    ]),
+  stage.appendChild(el("div", { class: "home-panel" }, [
+    el("h2", { text: "Frame t-SNE" }),
+    el("p", { text: "Description-balanced frame-sampled runs appear here." }),
     el("p", { class: "status", text: "Select a run from the sidebar." }),
   ]));
   document.querySelector(".panel").innerHTML = "";
+}
+
+function renderRunFeatureToggle(run) {
+  return el("div", { class: "run-feature-toggle" }, (run.features || []).map((feature) =>
+    el("button", {
+      class: `mini-btn run-feature-btn${hasChart(run.id, feature) ? " active" : ""}`,
+      text: feature,
+      title: `${run.label || run.id} ${feature}`,
+      onclick: (event) => toggleRunFeature(run, feature, event),
+    })
+  ));
+}
+
+async function toggleRunFeature(run, feature, event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (state.activeRunId !== run.id) {
+    await loadRun(run);
+  }
+  await toggleFeature(feature);
+  renderSidebar();
+  renderViewer();
 }
 
 async function loadRun(run, options = {}) {
@@ -608,16 +665,9 @@ async function loadRun(run, options = {}) {
       state.visibleSeqs = new Set(state.sequences.sequences.map((seq) => seq.seq_id));
     }
   }
-  const preferred = state.preferredFeatures.filter((feature) =>
-    state.runManifest.features.includes(feature)
-  );
-  if (isFirstChart && !state.selectedCharts.some((chart) => chart.runId === run.id)) {
-    const feature = preferred[0] || state.runManifest.features[0];
-    state.selectedCharts.push({ runId: run.id, feature });
-  }
   state.preferredFeatures = getSelectedFeaturesForRun(run.id);
   if (options.updateHash !== false) {
-    location.hash = versionHashParams({ family: run.family, run: run.id });
+    location.hash = hashParams({ family: run.family, run: run.id });
   }
   await Promise.all(state.selectedCharts.map((chart) => loadChartData(chart.runId, chart.feature)));
   ensureSelectedPoint(true);
@@ -661,9 +711,7 @@ function removeRunCharts(runId) {
   for (const chart of removedCharts) {
     state.chartStates.delete(chartKey(chart.runId, chart.feature));
   }
-  if (state.selected?.runId === runId) {
-    state.selected = null;
-  }
+  removeSelectedPointsForRun(runId);
   if (!state.selectedCharts.length) {
     state.run = null;
     state.runManifest = null;
@@ -674,7 +722,7 @@ function removeRunCharts(runId) {
     state.openTasks = new Set();
     renderSidebar();
     renderEmpty();
-    location.hash = versionHashParams({ family: state.family });
+    location.hash = hashParams({ family: state.family });
     return;
   }
   if (state.activeRunId === runId) {
@@ -688,7 +736,7 @@ function removeRunCharts(runId) {
   ensureSelectedPoint(true);
   renderSidebar();
   renderViewer();
-  location.hash = versionHashParams({ family: state.family, run: state.activeRunId });
+  location.hash = hashParams({ family: state.family, run: state.activeRunId });
 }
 
 function removeChartSelection(runId, feature) {
@@ -700,9 +748,7 @@ function removeChartSelection(runId, feature) {
   }
   state.selectedCharts = state.selectedCharts.filter((chart) => !(chart.runId === runId && chart.feature === feature));
   state.chartStates.delete(chartKey(runId, feature));
-  if (state.selected?.runId === runId) {
-    state.selected = null;
-  }
+  removeSelectedPointsForRun(runId);
   state.preferredFeatures = state.activeRunId ? getSelectedFeaturesForRun(state.activeRunId) : [];
   ensureSelectedPoint(true);
   renderSidebar();
@@ -719,10 +765,12 @@ function renderViewer() {
 
 function ensureSelectedPoint(allowReplace = false) {
   const selectedRunIsShown = state.selectedCharts.some((chart) => chart.runId === state.selected?.runId);
+  const selectedSeq = state.selected ? getSequenceById(state.selected.runId, state.selected.seq) : null;
   if (
     state.selected
     && selectedRunIsShown
     && isSequenceVisibleForRun(state.selected.runId, state.selected.seq)
+    && isPointInTimestepRange(state.selected, selectedSeq)
   ) return;
   if (state.selected && !allowReplace) return;
   const chart = state.selectedCharts[0];
@@ -730,37 +778,50 @@ function ensureSelectedPoint(allowReplace = false) {
   const pointPayload = state.pointsByChart.get(chartKey(chart.runId, chart.feature));
   if (!pointPayload || !pointPayload.points?.length) return;
   const visibleKeys = getVisibleSequenceKeys();
-  const first = pointPayload.points.find((row) => isSequenceVisibleForRun(chart.runId, row[2], visibleKeys));
+  const first = pointPayload.points.find((row) => {
+    const point = { x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5] };
+    const seq = getSequenceById(chart.runId, point.seq);
+    return isSequenceVisibleForRun(chart.runId, point.seq, visibleKeys)
+      && isPointInTimestepRange(point, seq);
+  });
   if (!first) {
-    state.selected = null;
+    clearSelectedPoints();
     return;
   }
-  state.selected = {
-    runId: chart.runId,
+  setSelectedPoints([buildSelection(chart.runId, {
     seq: first[2],
     anchor: first[3],
     frame: first[4],
     progress: first[5],
-  };
+  })]);
 }
 
 function renderTabs() {
-  const activeRun = getRunById(state.activeRunId);
-  const activeManifest = state.activeRunId ? state.runManifestsById.get(state.activeRunId) : null;
-  const features = activeManifest?.features || state.runManifest?.features || [];
+  const selectionControls = renderSelectionControls();
+  const cameraControls = renderCameraControls();
   const colorControls = renderColorControls();
-  const spacingControls = renderSpacingControls();
   const zoomControls = el("div", { class: "zoom-controls" }, [
     el("button", {
       class: `mini-btn zoom-btn pan-toggle${state.panMode ? " active" : ""}`,
-      text: "Pan",
       onclick: () => {
         state.panMode = !state.panMode;
+        if (state.panMode) state.lassoMode = false;
         renderTabs();
         renderCharts();
       },
       title: "Toggle drag pan",
-    }),
+      "aria-label": "Toggle drag pan",
+    }, [
+      el("img", {
+        class: "pan-icon",
+        src: "./assets/move.png",
+        alt: "",
+        width: "44",
+        height: "44",
+        style: "width:44px;height:44px;",
+      }),
+    ]),
+    renderLassoToolGroup(),
     el("button", {
       class: "mini-btn zoom-btn",
       text: "-",
@@ -779,26 +840,122 @@ function renderTabs() {
       title: "Zoom in",
     }),
   ]);
-  const tabs = el("div", { class: "tabs" },
-    features.map((feature) =>
-      el("button", {
-        class: `tab-btn${hasChart(state.activeRunId, feature) ? " active" : ""}`,
-        text: feature,
-        onclick: async () => {
-          await toggleFeature(feature);
-          renderViewer();
-        },
-      })
-    )
-  );
   const toolbar = el("div", { class: "stage-toolbar" }, [
-    tabs,
-    el("div", { class: "chart-controls" }, [colorControls, spacingControls, zoomControls]),
+    el("div", {
+      class: "chart-controls-left",
+    }, [
+      selectionControls,
+      ...(state.selectionMode === "multi" ? [cameraControls] : []),
+    ]),
+    el("div", {
+      class: "chart-controls-right",
+    }, [
+      colorControls,
+      zoomControls,
+    ]),
   ]);
   document.querySelector(".stage").innerHTML = "";
   renderVideoStrip(document.querySelector(".stage"));
   document.querySelector(".stage").appendChild(toolbar);
   document.querySelector(".stage").appendChild(el("div", { class: "chart-grid" }));
+}
+
+function renderLassoToolGroup() {
+  return el("div", { class: "lasso-tool-group" }, [
+    el("button", {
+      class: `mini-btn zoom-btn lasso-toggle${state.lassoMode ? " active" : ""}`,
+      onclick: () => {
+        state.lassoMode = !state.lassoMode;
+        if (state.lassoMode) state.panMode = false;
+        renderTabs();
+        renderCharts();
+      },
+      title: "Draw freeform region",
+      "aria-label": "Draw freeform region",
+    }, [
+      el("img", {
+        class: "lasso-icon",
+        src: "./assets/lasso-select.svg",
+        alt: "",
+        width: "44",
+        height: "44",
+        style: "width:44px;height:44px;",
+      }),
+    ]),
+    renderLassoRegionActions(),
+  ]);
+}
+
+function renderLassoRegionActions() {
+  const hasRegions = state.lassoRegions.length > 0;
+  const disabledAttrs = hasRegions ? {} : { disabled: "disabled", "aria-disabled": "true" };
+  return el("div", { class: `lasso-region-actions${hasRegions ? " active" : ""}` }, [
+    el("button", {
+      class: "mini-btn lasso-region-btn",
+      text: "Undo",
+      title: "Undo last freedom region",
+      onclick: undoLassoRegion,
+      ...disabledAttrs,
+    }),
+    el("button", {
+      class: "mini-btn lasso-region-btn",
+      text: "Clear",
+      title: "Clear all freedom regions",
+      onclick: clearLassoRegions,
+      ...disabledAttrs,
+    }),
+  ]);
+}
+
+function renderSelectionControls() {
+  return el("div", { class: "selection-mode-toggle" }, [
+    el("button", {
+      class: `mini-btn selection-mode-btn${state.selectionMode === "single" ? " active" : ""}`,
+      text: "Single point",
+      title: "Keep one active point",
+      onclick: () => setSelectionMode("single"),
+    }),
+    el("button", {
+      class: `mini-btn selection-mode-btn${state.selectionMode === "multi" ? " active" : ""}`,
+      text: "Multi point",
+      title: "Keep up to three active points",
+      onclick: () => setSelectionMode("multi"),
+    }),
+  ]);
+}
+
+function setSelectionMode(mode) {
+  if (state.selectionMode === mode) return;
+  state.selectionMode = mode;
+  if (mode === "single" && state.selectedPoints.length > 1) {
+    setSelectedPoints([state.selectedPoints[state.selectedPoints.length - 1]]);
+  }
+  renderTabs();
+  renderCharts();
+  renderPanel();
+}
+
+function renderCameraControls() {
+  const cams = [
+    ["robot0_agentview_left", "Left"],
+    ["robot0_agentview_right", "Right"],
+    ["robot0_eye_in_hand", "Eye"],
+  ];
+  return el("div", { class: "camera-mode-toggle" }, cams.map(([cam, label]) =>
+    el("button", {
+      class: `mini-btn camera-mode-btn${state.cam === cam ? " active" : ""}`,
+      text: label,
+      title: cam.replace("robot0_", ""),
+      onclick: () => setCamera(cam),
+    })
+  ));
+}
+
+function setCamera(cam) {
+  if (state.cam === cam) return;
+  state.cam = cam;
+  renderTabs();
+  renderPanel();
 }
 
 function renderColorControls() {
@@ -818,21 +975,46 @@ function renderColorControls() {
       }),
     ]),
   ]);
-  if (state.colorMode === "timestep") {
-    controls.appendChild(renderTimestepLegend());
-  }
+  controls.appendChild(renderTimestepLegend());
   return controls;
 }
 
 function renderTimestepLegend() {
   return el("div", { class: "timestep-legend", title: "Timestep color scale" }, [
     el("div", { class: "timestep-legend-title", text: "Episode timestep" }),
-    el("div", { class: "timestep-ramp" }),
+    el("div", {
+      class: "timestep-range-control",
+      onpointerdown: (event) => startTimestepRangeDrag("nearest", event),
+    }, [
+      el("div", { class: "timestep-ramp" }),
+      el("div", {
+        class: "timestep-window",
+        style: `left:${state.timestepRange[0] * 100}%;right:${(1 - state.timestepRange[1]) * 100}%;`,
+      }),
+      el("button", {
+        class: "timestep-handle timestep-handle-start",
+        style: `left:${state.timestepRange[0] * 100}%;`,
+        title: "Start timestep",
+        "aria-label": "Start timestep",
+        onpointerdown: (event) => startTimestepRangeDrag("start", event),
+      }),
+      el("button", {
+        class: "timestep-handle timestep-handle-end",
+        style: `left:${state.timestepRange[1] * 100}%;`,
+        title: "End timestep",
+        "aria-label": "End timestep",
+        onpointerdown: (event) => startTimestepRangeDrag("end", event),
+      }),
+    ]),
     el("div", { class: "timestep-ticks" }, [
       el("span", { text: "start" }),
       el("span", { text: "mid" }),
       el("span", { text: "end" }),
     ]),
+    el("div", {
+      class: "timestep-range-label",
+      text: `${Math.round(state.timestepRange[0] * 100)}-${Math.round(state.timestepRange[1] * 100)}%`,
+    }),
   ]);
 }
 
@@ -841,6 +1023,51 @@ function setColorMode(mode) {
   state.colorMode = mode;
   renderTabs();
   renderCharts();
+}
+
+function startTimestepRangeDrag(handle, event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const track = event.currentTarget.closest(".timestep-range-control") || event.currentTarget;
+  const rect = track.getBoundingClientRect();
+  const chooseHandle = (clientX) => {
+    if (handle !== "nearest") return handle;
+    const value = clamp((clientX - rect.left) / rect.width, 0, 1);
+    return Math.abs(value - state.timestepRange[0]) <= Math.abs(value - state.timestepRange[1])
+      ? "start"
+      : "end";
+  };
+  const activeHandle = chooseHandle(event.clientX);
+  const updateFromClientX = (clientX) => {
+    const value = clamp((clientX - rect.left) / rect.width, 0, 1);
+    if (activeHandle === "start") setTimestepRange(value, state.timestepRange[1]);
+    else setTimestepRange(state.timestepRange[0], value);
+  };
+  const onMove = (moveEvent) => updateFromClientX(moveEvent.clientX);
+  const onUp = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+  };
+  updateFromClientX(event.clientX);
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+}
+
+function setTimestepRange(start, end) {
+  const minGap = 0.01;
+  let nextStart = clamp(start, 0, 1);
+  let nextEnd = clamp(end, 0, 1);
+  if (nextStart > nextEnd - minGap) {
+    if (start !== state.timestepRange[0]) nextStart = Math.max(0, nextEnd - minGap);
+    else nextEnd = Math.min(1, nextStart + minGap);
+  }
+  state.timestepRange = [nextStart, nextEnd];
+  ensureSelectedPoint(true);
+  renderTabs();
+  renderCharts();
+  renderPanel();
 }
 
 function renderSpacingControls() {
@@ -888,12 +1115,10 @@ async function toggleFeature(feature) {
   const runId = state.activeRunId;
   if (!runId) return;
   const isSelected = hasChart(runId, feature);
-  if (isSelected && state.selectedCharts.length === 1) return;
   if (isSelected) {
     state.selectedCharts = state.selectedCharts.filter((chart) =>
       !(chart.runId === runId && chart.feature === feature)
     );
-    if (state.selected?.runId === runId) state.selected = null;
   } else {
     await loadChartData(runId, feature);
     state.selectedCharts.push({ runId, feature });
@@ -926,6 +1151,20 @@ function getZoomReadout() {
     : "multi";
 }
 
+function undoLassoRegion() {
+  if (!state.lassoRegions.length) return;
+  state.lassoRegions.pop();
+  renderTabs();
+  renderCharts();
+}
+
+function clearLassoRegions() {
+  if (!state.lassoRegions.length) return;
+  state.lassoRegions = [];
+  renderTabs();
+  renderCharts();
+}
+
 function scaleSelectedCharts(factor) {
   for (const chart of state.selectedCharts) {
     const key = chartKey(chart.runId, chart.feature);
@@ -938,44 +1177,51 @@ function scaleSelectedCharts(factor) {
 }
 
 function renderVideoStrip(stage) {
-  if (!state.selected || !state.sequences) return;
-  const sequences = getSequencesForRun(state.selected.runId);
-  const manifest = state.runManifestsById.get(state.selected.runId) || state.runManifest;
-  const seq = sequences.sequences[state.selected.seq];
-  if (!seq || !seq.videos) return;
-  const cams = Object.keys(seq.videos);
-  if (!cams.length) return;
-  const fps = manifest.fps || 20;
-  const videoStartFrame = numericValue(seq.video_start_frame) ?? 0;
-  const currentTime = Math.max(0, (state.selected.frame - videoStartFrame) / fps);
-  const cards = cams.map((cam) => {
-    const video = el("video", {
-      autoplay: "autoplay",
-      controls: "controls",
-      loop: "loop",
-      muted: "muted",
-      playsinline: "playsinline",
-      src: `./${seq.videos[cam]}`,
+  const selections = state.selectedPoints;
+  if (!selections.length) return;
+  const cards = selections.flatMap((selection, index) => {
+    const sequences = getSequencesForRun(selection.runId);
+    const manifest = state.runManifestsById.get(selection.runId) || state.runManifest;
+    const seq = sequences?.sequences?.[selection.seq];
+    if (!seq || !seq.videos) return null;
+    const cams = Object.keys(seq.videos);
+    if (!cams.length) return null;
+    const shownCams = state.selectionMode === "single"
+      ? ["robot0_agentview_left", "robot0_agentview_right", "robot0_eye_in_hand"].filter((cam) => seq.videos[cam])
+      : [seq.videos[state.cam] ? state.cam : cams[0]];
+    const fps = manifest.fps || 20;
+    const videoStartFrame = numericValue(seq.video_start_frame) ?? 0;
+    const currentTime = Math.max(0, (selection.frame - videoStartFrame) / fps);
+    const selectedRun = getRunById(selection.runId);
+    const selectionAccent = getSelectionAccent(selection);
+    return shownCams.map((cam) => {
+      const video = el("video", {
+        autoplay: "autoplay",
+        controls: "controls",
+        loop: "loop",
+        muted: "muted",
+        playsinline: "playsinline",
+        src: `./${seq.videos[cam]}`,
+        ...(state.selectionMode === "multi"
+          ? { style: `border-color:${selectionAccent};box-shadow:0 0 0 1px ${selectionAccent};` }
+          : {}),
+      });
+      video.addEventListener("loadedmetadata", () => {
+        const maxTime = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.05) : currentTime;
+        video.currentTime = Math.min(currentTime, maxTime);
+        const playPromise = video.play();
+        if (playPromise && typeof playPromise.catch === "function") playPromise.catch(() => {});
+      });
+      return el("div", { class: "video-card" }, [
+        el("div", {
+          class: "video-label",
+          text: `${index + 1}. ${selectedRun?.label || selection.runId} / ${cam.replace("robot0_", "")} / frame ${selection.frame}`,
+        }),
+        video,
+      ]);
     });
-    video.dataset.syncVideo = "1";
-    video.addEventListener("loadedmetadata", () => {
-      const maxTime = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.05) : currentTime;
-      video.currentTime = Math.min(currentTime, maxTime);
-      const playPromise = video.play();
-      if (playPromise && typeof playPromise.catch === "function") playPromise.catch(() => {});
-    });
-    video.addEventListener("play", () => syncVideosFrom(video, { syncPlayback: true }));
-    video.addEventListener("pause", () => syncVideosFrom(video, { syncPlayback: true }));
-    video.addEventListener("ratechange", () => syncVideosFrom(video, { syncPlayback: false }));
-    video.addEventListener("seeking", () => syncVideosFrom(video, { syncPlayback: false, forceTime: true }));
-    video.addEventListener("timeupdate", () => syncVideosFrom(video, { syncPlayback: false }));
-    video.addEventListener("seeked", () => syncSelectionToVideo(video));
-    return el("div", { class: "video-card" }, [
-      el("div", { class: "video-label", text: cam.replace("robot0_", "") }),
-      video,
-    ]);
-  });
-  stage.appendChild(el("div", { class: "video-strip" }, cards));
+  }).filter(Boolean);
+  if (cards.length) stage.appendChild(el("div", { class: "video-strip" }, cards));
 }
 
 function getSyncVideos() {
@@ -1015,6 +1261,10 @@ function renderCharts() {
   if (!grid) return;
   grid.innerHTML = "";
   grid.className = `chart-grid chart-count-${Math.min(state.selectedCharts.length, 6)}`;
+  if (!state.selectedCharts.length) {
+    grid.appendChild(el("div", { class: "status", text: "No feature selected." }));
+    return;
+  }
   for (const chart of state.selectedCharts) {
     const run = getRunById(chart.runId);
     const label = `${run?.label || chart.runId} / ${chart.feature}`;
@@ -1044,7 +1294,14 @@ function renderCharts() {
 }
 
 function selectPoint(runId, point) {
-  state.selected = buildSelection(runId, point);
+  const nextSelection = buildSelection(runId, point);
+  if (state.selectionMode === "single") {
+    setSelectedPoints([nextSelection]);
+  } else {
+    const key = selectionKey(nextSelection);
+    if (state.selectedPoints.some((selection) => selectionKey(selection) === key)) return;
+    setSelectedPoints([...state.selectedPoints.slice(-2), nextSelection]);
+  }
   renderTabs();
   renderCharts();
   renderPanel();
@@ -1061,17 +1318,24 @@ function renderChart(runId, feature) {
     x: row[0], y: row[1], seq: row[2], anchor: row[3], frame: row[4], progress: row[5],
   })));
   const visibleKeys = getVisibleSequenceKeys();
-  const visiblePoints = allPoints.filter((point) => isSequenceVisibleForRun(runId, point.seq, visibleKeys));
-  if (state.selected && !isSequenceVisibleForRun(state.selected.runId, state.selected.seq, visibleKeys)) {
-    state.selected = null;
+  const visiblePoints = allPoints.filter((point) => {
+    const seq = sequences.sequences[point.seq];
+    return isSequenceVisibleForRun(runId, point.seq, visibleKeys)
+      && isPointInTimestepRange(point, seq);
+  });
+  if (state.selectedPoints.length) {
+    setSelectedPoints(state.selectedPoints.filter(isSelectionVisible));
+  }
+  if (state.selected && !isSelectionVisible(state.selected)) {
+    clearSelectedPoints();
     ensureSelectedPoint(true);
   }
   if (!visiblePoints.length) {
-    wrap.innerHTML = `<p class="status">No task descriptions selected.</p>`;
+    wrap.innerHTML = `<p class="status">No points in the selected timestep range.</p>`;
     return;
   }
-  const xs = allPoints.map((p) => p.x);
-  const ys = allPoints.map((p) => p.y);
+  const xs = visiblePoints.map((p) => p.x);
+  const ys = visiblePoints.map((p) => p.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   const padX = (maxX - minX || 1) * 0.08;
@@ -1137,13 +1401,28 @@ function renderChart(runId, feature) {
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d", getSequencePathD(seqPoints));
       path.setAttribute("class", "path-line");
-      path.setAttribute("stroke", colors[seq.task_id % colors.length]);
+      path.setAttribute("stroke", getTaskColor(seq));
       path.dataset.episodeKey = seqKey;
       if (seqSelectionKey) path.dataset.episodeSelectionKey = seqSelectionKey;
       path.addEventListener("mouseenter", () => setHoveredEpisode(runId, seqId));
       path.addEventListener("mouseleave", () => setHoveredEpisode(null, null));
       svg.appendChild(path);
     }
+  }
+  for (const point of visiblePoints) {
+    const globalKey = getPointGlobalKey(runId, point);
+    if (!globalKey) continue;
+    state.lassoRegions.forEach((region, index) => {
+      if (!region.keys.has(globalKey)) return;
+      const marker = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      marker.setAttribute("cx", point.x);
+      marker.setAttribute("cy", point.y);
+      marker.setAttribute("r", String(1.85 + Math.min(index, 4) * 0.16));
+      marker.setAttribute("class", "lasso-point-highlight");
+      marker.setAttribute("fill", region.fill);
+      marker.setAttribute("stroke", region.stroke);
+      svg.appendChild(marker);
+    });
   }
   for (const point of visiblePoints) {
     const chartPoint = { ...point, runId };
@@ -1176,12 +1455,15 @@ function renderChart(runId, feature) {
     const seq = sequences.sequences[point.seq];
     const seqSelectionKey = getEpisodeSelectionKey(runId, point.seq);
     const pointColor = getPointColor(point, seq);
+    const selectedCenterColor = complementColor(getTaskColor(seq));
+    const selectedAccent = getSelectionAccent(buildSelection(runId, point));
     const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     ring.setAttribute("cx", point.x);
     ring.setAttribute("cy", point.y);
-    ring.setAttribute("r", "1.95");
+    ring.setAttribute("r", "2.1");
     ring.setAttribute("class", "selected-ring");
     ring.setAttribute("fill", pointColor);
+    ring.setAttribute("stroke", selectedAccent);
     ring.dataset.episodeKey = episodeKey(runId, point.seq);
     if (seqSelectionKey) ring.dataset.episodeSelectionKey = seqSelectionKey;
     ring.dataset.run = runId;
@@ -1198,9 +1480,9 @@ function renderChart(runId, feature) {
     const center = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     center.setAttribute("cx", point.x);
     center.setAttribute("cy", point.y);
-    center.setAttribute("r", "0.86");
+    center.setAttribute("r", "0.72");
     center.setAttribute("class", "dot selected");
-    center.setAttribute("fill", "#ffffff");
+    center.setAttribute("fill", selectedCenterColor);
     center.dataset.episodeKey = episodeKey(runId, point.seq);
     if (seqSelectionKey) center.dataset.episodeSelectionKey = seqSelectionKey;
     center.dataset.run = runId;
@@ -1216,9 +1498,11 @@ function renderChart(runId, feature) {
   }
   wrap.innerHTML = "";
   wrap.classList.toggle("pan-enabled", state.panMode);
+  wrap.classList.toggle("lasso-enabled", state.lassoMode);
   wrap.appendChild(svg);
-  attachChartPan(svg, runId, feature);
   updateChartViewBox(runId, feature);
+  attachChartLasso(svg, runId, feature, visiblePoints);
+  attachChartPan(svg, runId, feature);
 }
 
 function getChartCenter(runId, feature) {
@@ -1246,6 +1530,85 @@ function updateChartViewBox(runId, feature) {
   );
   const readout = document.querySelector(".zoom-readout");
   if (readout) readout.textContent = getZoomReadout();
+}
+
+function clientPointToSvg(svg, clientX, clientY) {
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return null;
+  const point = svg.createSVGPoint();
+  point.x = clientX;
+  point.y = clientY;
+  const transformed = point.matrixTransform(matrix.inverse());
+  return { x: transformed.x, y: transformed.y };
+}
+
+function pointInPolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const pi = polygon[i];
+    const pj = polygon[j];
+    const intersects = ((pi.y > point.y) !== (pj.y > point.y))
+      && point.x < ((pj.x - pi.x) * (point.y - pi.y)) / ((pj.y - pi.y) || 1e-9) + pi.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function attachChartLasso(svg, runId, feature, visiblePoints) {
+  svg.addEventListener("pointerdown", (event) => {
+    if (!state.lassoMode || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    svg.setPointerCapture(event.pointerId);
+    const regionColor = lassoPalette[state.lassoRegions.length % lassoPalette.length];
+    const polygon = [];
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    path.setAttribute("class", "lasso-draft");
+    path.setAttribute("fill", regionColor.fill);
+    path.setAttribute("stroke", regionColor.stroke);
+    svg.appendChild(path);
+
+    const addPoint = (pointerEvent) => {
+      const point = clientPointToSvg(svg, pointerEvent.clientX, pointerEvent.clientY);
+      if (!point) return;
+      const last = polygon[polygon.length - 1];
+      if (last && Math.hypot(point.x - last.x, point.y - last.y) < 0.4) return;
+      polygon.push(point);
+      path.setAttribute("points", polygon.map((p) => `${p.x},${p.y}`).join(" "));
+    };
+
+    const onMove = (moveEvent) => addPoint(moveEvent);
+    const onUp = () => {
+      svg.releasePointerCapture(event.pointerId);
+      svg.removeEventListener("pointermove", onMove);
+      svg.removeEventListener("pointerup", onUp);
+      svg.removeEventListener("pointercancel", onUp);
+      if (path.parentNode) path.parentNode.removeChild(path);
+      if (polygon.length >= 3) {
+        const nextKeys = new Set();
+        for (const point of visiblePoints) {
+          if (!pointInPolygon(point, polygon)) continue;
+          const key = getPointGlobalKey(runId, point);
+          if (key) nextKeys.add(key);
+        }
+        if (nextKeys.size) {
+          state.lassoRegions.push({
+            keys: nextKeys,
+            fill: regionColor.fill,
+            stroke: regionColor.stroke,
+          });
+          renderTabs();
+          renderCharts();
+        }
+      }
+    };
+
+    addPoint(event);
+    svg.addEventListener("pointermove", onMove);
+    svg.addEventListener("pointerup", onUp);
+    svg.addEventListener("pointercancel", onUp);
+  });
 }
 
 function zoomChartAt(runId, feature, clientX, clientY, direction) {
@@ -1321,14 +1684,13 @@ function attachChartPan(svg, runId, feature) {
 
 function isSelected(point) {
   const selectionKey = getPointSelectionKey(point.runId, point);
-  if (state.selected?.selectionKey && selectionKey) {
-    return state.selected.selectionKey === selectionKey;
-  }
-  return state.selected
-    && state.selected.runId === point.runId
-    && state.selected.seq === point.seq
-    && state.selected.anchor === point.anchor
-    && state.selected.frame === point.frame;
+  return state.selectedPoints.some((selection) => {
+    if (selection.selectionKey && selectionKey) return selection.selectionKey === selectionKey;
+    return selection.runId === point.runId
+      && selection.seq === point.seq
+      && selection.anchor === point.anchor
+      && selection.frame === point.frame;
+  });
 }
 
 function getSelectedEpisodeKey() {
@@ -1350,7 +1712,6 @@ function isFocusedEpisode(runId, seqId) {
 function updateEpisodeFocus() {
   const selectedKey = getSelectedEpisodeKey();
   const selectedEpisodeSelectionKey = getSelectedEpisodeSelectionKey();
-  const focusedKey = state.hoveredEpisodeKey || selectedKey;
   document.querySelectorAll("[data-episode-key]").forEach((node) => {
     const key = node.dataset.episodeKey;
     const episodeSelectionKey = node.dataset.episodeSelectionKey;
@@ -1359,11 +1720,7 @@ function updateEpisodeFocus() {
     );
     node.classList.toggle("episode-hovered", Boolean(state.hoveredEpisodeKey && key === state.hoveredEpisodeKey));
     node.classList.toggle("episode-active", Boolean((selectedKey && key === selectedKey) || selectedByManifest));
-    node.classList.toggle("episode-dimmed", Boolean(
-      state.hoveredEpisodeKey
-        ? key !== focusedKey
-        : selectedEpisodeSelectionKey && !selectedByManifest
-    ));
+    node.classList.remove("episode-dimmed");
   });
 }
 
@@ -1410,7 +1767,8 @@ function syncSelectionToVideo(video) {
   const frame = Math.round(video.currentTime * fps) + videoStartFrame;
   const point = nearestPointForFrame(state.selected.seq, frame);
   if (!point || isSelected(point)) return;
-  state.selected = buildSelection(point.runId || state.selected.runId, point);
+  const nextSelection = buildSelection(point.runId || state.selected.runId, point);
+  setSelectedPoints([...state.selectedPoints.slice(0, -1), nextSelection]);
   updateSelectedMarker();
   updateSelectionFrame();
 }
@@ -1444,9 +1802,20 @@ function renderPanel() {
   panel.innerHTML = "";
   renderTaskDescriptionPanel(panel);
   panel.appendChild(el("h2", { text: "Selection" }));
-  if (!seq) {
+  if (!state.selectedPoints.length || !seq) {
     panel.appendChild(el("p", { class: "status", text: "Click a trajectory point." }));
     return;
+  }
+  if (state.selectedPoints.length > 1) {
+    panel.appendChild(el("div", { class: "selection-list" }, state.selectedPoints.map((selection, index) => {
+      const selectionSeqs = state.sequencesByRunId.get(selection.runId) || state.sequences;
+      const selectionSeq = selectionSeqs?.sequences?.[selection.seq];
+      const selectionRun = getRunById(selection.runId);
+      return el("div", { class: `selection-chip${selection === state.selected ? " active" : ""}` }, [
+        el("strong", { text: `${index + 1}. ${selectionRun?.label || selection.runId}` }),
+        el("span", { text: `${selectionSeq?.task_name || ""} / frame ${selection.frame}` }),
+      ]);
+    })));
   }
   const selectedRun = getRunById(state.selected.runId);
   panel.appendChild(el("div", { class: "info" }, [
@@ -1474,7 +1843,7 @@ function renderPanel() {
 
 function renderTaskDescriptionPanel(panel) {
   const sequences = state.sequences ? state.sequences.sequences : [];
-  const isFrameVersion = state.catalogVersion === "v2";
+  const isFrameVersion = true;
   const byTask = new Map();
   for (const seq of sequences) {
     if (!byTask.has(seq.task_name)) byTask.set(seq.task_name, []);

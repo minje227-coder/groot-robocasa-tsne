@@ -2,14 +2,15 @@
   "version": 2,
   "families": [
     "baseline",
-    "MGD",
-    "RKD"
+    "MGRKD",
+    "RKD",
+    "MGD"
   ],
   "runs": [
     {
       "id": "mgrkd_distance_angle_flatten_action_encoder_phase2_frame",
-      "family": "RKD",
-      "label": "MGRKD_distance_angle_flatten_action_encoder_phase2_frame",
+      "family": "MGRKD",
+      "label": "MGRKD [DA, Action encoder] Phase 2",
       "path": "runs/mgrkd_distance_angle_flatten_action_encoder_phase2_frame",
       "manifest_id": "f0367e9630",
       "features": [

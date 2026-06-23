@@ -1,8 +1,8 @@
 {
   "version": 1,
   "run_id": "mgrkd_distance_angle_flatten_action_encoder_phase2_frame",
-  "label": "MGRKD_distance_angle_flatten_action_encoder_phase2_frame",
-  "family": "RKD",
+  "label": "MGRKD [DA, Action encoder] Phase 2",
+  "family": "MGRKD",
   "checkpoint_dir": "/home/seonho/groot_robocasa/robocasa_v2/MGRKD/mgrkd_distance_angle_flatten_action_encoder/default/phase2",
   "policy_type": "groot_mgrkd",
   "manifest_id": "f0367e9630",

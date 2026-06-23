@@ -40,12 +40,13 @@ reference points for later raw-backbone comparisons.
 
 | Family | Run | Features |
 | --- | --- | --- |
-| baseline | `baseline_checkpoint_60000` | `raw`, `processed`, `action` |
-| baseline | `baseline_checkpoint_120000` | `raw`, `processed`, `action` |
-| MGD | `mgd_seed44_phase2` | `processed`, `action` |
-| MGD | `mgd_seed44_phase3` | `processed`, `action` |
-| RKD | `rkd_v2a_phase2` | `processed`, `action` |
-| RKD | `rkd_v2a_phase3` | `processed`, `action` |
+| baseline | `baseline_checkpoint_60000_frame` | `raw`, `processed`, `action` |
+| baseline | `baseline_checkpoint_120000_frame` | `raw`, `processed`, `action` |
+| RKD | `rkd_v2_1_a_phase2_frame` | `raw`, `processed`, `action` |
+| RKD | `rkd_v2_1_a_phase3_frame` | `raw`, `processed`, `action` |
+| RKD | `rkd_v2_1_da_phase2_frame` | `raw`, `processed`, `action` |
+| RKD | `rkd_v2_1_da_phase3_frame` | `raw`, `processed`, `action` |
+| MGRKD | `mgrkd_distance_angle_flatten_action_encoder_phase2_frame` | `raw`, `processed`, `action` |
 
 MGD and RKD do not export raw VLM features for now because the raw VLM backbone is
 not expected to change across those runs. Raw features can be added later if a new

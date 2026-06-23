@@ -102,14 +102,13 @@ body.resizing-panel {
   user-select: none;
 }
 
-.version-grid,
 .family-grid {
   display: grid;
   gap: 10px;
   margin-bottom: 18px;
 }
 
-.version-btn, .family-btn, .run-btn, .tab-btn, .cam-btn {
+.family-btn, .run-btn, .tab-btn, .cam-btn {
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink);
@@ -120,7 +119,7 @@ body.resizing-panel {
   cursor: pointer;
 }
 
-.version-btn.active, .family-btn.active, .run-btn.active, .tab-btn.active, .cam-btn.active {
+.family-btn.active, .run-btn.active, .tab-btn.active, .cam-btn.active {
   border-color: #064f8f;
   background: #cfe8ff;
   box-shadow: inset 4px 0 0 #064f8f, 0 0 0 1px rgba(6, 79, 143, 0.12);
@@ -128,7 +127,7 @@ body.resizing-panel {
   font-weight: 700;
 }
 
-.version-home {
+.home-panel {
   max-width: 720px;
   margin: 24px auto;
   background: var(--panel);
@@ -137,37 +136,54 @@ body.resizing-panel {
   padding: 20px;
 }
 
-.version-home h2 {
+.home-panel h2 {
   margin: 0 0 8px;
   font-size: 20px;
 }
 
-.version-actions {
-  display: flex;
-  gap: 10px;
-  margin: 16px 0;
-  flex-wrap: wrap;
-}
-
-.run-btn.selected:not(.active) {
-  border-color: #63a3d8;
+.run-btn.selected {
+  border-color: #0f6cbd;
   background: #edf7ff;
-  box-shadow: inset 4px 0 0 #63a3d8;
-}
-
-.run-btn.selected strong::after {
-  content: "shown";
-  margin-left: 8px;
-  color: #0f6cbd;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  box-shadow: inset 4px 0 0 #0f6cbd;
 }
 
 .run-list {
   display: grid;
   gap: 8px;
+}
+
+.run-feature-toggle {
+  display: inline-flex;
+  gap: 0;
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.run-feature-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 7px 6px;
+  font-size: 12px;
+  text-align: center;
+  color: #334155;
+  background: transparent;
+}
+
+.run-feature-btn + .run-feature-btn {
+  border-left: 1px solid var(--line);
+}
+
+.run-feature-btn.active {
+  background: #dbeafe;
+  color: #0f3f75;
+  box-shadow: inset 0 -3px 0 #0f6cbd;
+  font-weight: 700;
 }
 
 .sidebar-help {
@@ -214,12 +230,22 @@ body.resizing-panel {
   flex-shrink: 0;
 }
 
-.chart-controls {
+.chart-controls-left,
+.chart-controls-right {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.chart-controls-left {
+  justify-content: flex-start;
+}
+
+.chart-controls-right {
+  justify-content: flex-end;
+  margin-left: auto;
+  text-align: right;
 }
 
 .color-controls,
@@ -231,8 +257,12 @@ body.resizing-panel {
 }
 
 .color-mode-toggle,
-.spacing-mode-toggle {
+.spacing-mode-toggle,
+.selection-mode-toggle,
+.camera-mode-toggle,
+.feature-mode-toggle {
   display: inline-flex;
+  gap: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
@@ -240,10 +270,21 @@ body.resizing-panel {
 }
 
 .color-mode-btn,
-.spacing-mode-btn {
+.spacing-mode-btn,
+.selection-mode-btn,
+.camera-mode-btn,
+.feature-mode-btn {
   border: 0;
   border-radius: 0;
   min-width: 72px;
+}
+
+.camera-mode-btn {
+  min-width: 58px;
+}
+
+.selection-mode-btn {
+  min-width: 104px;
 }
 
 .spacing-mode-btn {
@@ -251,12 +292,18 @@ body.resizing-panel {
 }
 
 .color-mode-btn + .color-mode-btn,
-.spacing-mode-btn + .spacing-mode-btn {
+.spacing-mode-btn + .spacing-mode-btn,
+.selection-mode-btn + .selection-mode-btn,
+.camera-mode-btn + .camera-mode-btn,
+.feature-mode-btn + .feature-mode-btn {
   border-left: 1px solid var(--line);
 }
 
 .color-mode-btn.active,
-.spacing-mode-btn.active {
+.spacing-mode-btn.active,
+.selection-mode-btn.active,
+.camera-mode-btn.active,
+.feature-mode-btn.active {
   background: var(--accent-soft);
   color: #082f49;
   font-weight: 700;
@@ -265,8 +312,8 @@ body.resizing-panel {
 .timestep-legend {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 2px;
-  width: 160px;
+  gap: 3px;
+  width: 180px;
   flex-shrink: 0;
 }
 
@@ -278,11 +325,49 @@ body.resizing-panel {
   text-transform: uppercase;
 }
 
+.timestep-range-control {
+  position: relative;
+  height: 22px;
+  cursor: pointer;
+  touch-action: none;
+}
+
 .timestep-ramp {
+  position: absolute;
+  inset: 7px 0;
   height: 8px;
   border: 1px solid rgba(15, 23, 42, 0.18);
   border-radius: 999px;
   background: linear-gradient(90deg, #173b66 0%, #2f6f8f 36%, #82a782 68%, #f3df58 100%);
+}
+
+.timestep-window {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border: 2px solid #0f172a;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.75);
+  pointer-events: none;
+}
+
+.timestep-handle {
+  position: absolute;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 2px solid #0f172a;
+  border-radius: 50%;
+  background: #facc15;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.28);
+  cursor: grab;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+}
+
+.timestep-handle:active {
+  cursor: grabbing;
 }
 
 .timestep-ticks {
@@ -293,21 +378,103 @@ body.resizing-panel {
   font-variant-numeric: tabular-nums;
 }
 
+.timestep-range-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .zoom-btn {
   width: 34px;
   text-align: center;
   padding: 7px 0;
 }
 
-.pan-toggle {
+.pan-toggle,
+.lasso-toggle {
   width: auto;
   min-width: 46px;
+  height: auto;
   padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.pan-toggle.active {
+.pan-toggle.active,
+.lasso-toggle.active {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.pan-icon,
+.lasso-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+  object-fit: contain;
+}
+
+.lasso-tool-group {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  height: 60px;
+}
+
+.lasso-tool-group .lasso-toggle {
+  height: 60px;
+  min-width: 66px;
+  border-radius: 8px 0 0 8px;
+  border-right: 0;
+}
+
+.lasso-region-actions {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  width: 66px;
+  height: 60px;
+  border: 1px solid var(--line);
+  border-radius: 0 8px 8px 0;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.lasso-region-btn {
+  min-width: 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1;
+  cursor: default;
+}
+
+.lasso-region-btn + .lasso-region-btn {
+  border-top: 1px solid var(--line);
+}
+
+.lasso-region-actions.active {
+  border-color: rgba(15, 108, 189, 0.55);
+  background: #f8fbff;
+}
+
+.lasso-region-actions.active .lasso-region-btn {
+  color: #0f6cbd;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.lasso-region-actions.active .lasso-region-btn:hover {
+  background: var(--accent-soft);
+}
+
+.lasso-region-btn:disabled {
+  color: #94a3b8;
+  cursor: default;
 }
 
 .zoom-readout {
@@ -433,9 +600,39 @@ body.resizing-panel {
 }
 
 .video-strip video {
+  width: 100%;
   aspect-ratio: 16 / 9;
+  border: 2px solid transparent;
+  border-radius: 8px;
+}
+
+.selection-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.selection-chip {
   border: 1px solid var(--line);
   border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+}
+
+.selection-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.selection-chip strong,
+.selection-chip span {
+  display: block;
+}
+
+.selection-chip span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
 }
 
 .video-strip + .tabs + .chart-wrap {
@@ -455,6 +652,10 @@ svg {
 
 .chart-wrap.pan-enabled .chart-pan-surface {
   cursor: grab;
+}
+
+.chart-wrap.lasso-enabled .chart-pan-surface {
+  cursor: crosshair;
 }
 
 .chart-wrap svg.panning .chart-pan-surface {
@@ -515,8 +716,9 @@ svg {
 }
 
 .dot.selected {
-  stroke: rgba(15, 23, 42, 0.82);
-  stroke-width: 1.45;
+  stroke: #0f172a;
+  stroke-width: 0.68;
+  pointer-events: none;
 }
 
 .dot.episode-hovered,
@@ -525,12 +727,21 @@ svg {
   opacity: 1;
 }
 
-.selected-ring {
-  stroke: #0f172a;
+.lasso-point-highlight {
   stroke-width: 0.42;
-  filter: drop-shadow(0 0 1.2px rgba(15, 23, 42, 1))
-    drop-shadow(0 0 8px rgba(15, 23, 42, 0.38));
-  cursor: pointer;
+  pointer-events: none;
+}
+
+.lasso-draft {
+  stroke-width: 0.72;
+  stroke-dasharray: 2 1.4;
+  pointer-events: none;
+}
+
+.selected-ring {
+  stroke-width: 0.78;
+  filter: drop-shadow(0 0 1.2px rgba(15, 23, 42, 1));
+  pointer-events: none;
 }
 
 .panel h2, .sidebar h2 {
