@@ -42,6 +42,7 @@ def validate(root: Path) -> list[str]:
     catalog = load_json(catalog_path)
     runs = catalog.get("runs", [])
     seen_ids: set[str] = set()
+    seen_video_paths: set[str] = set()
     for run in runs:
         run_id = run.get("id")
         if not run_id:
@@ -71,6 +72,9 @@ def validate(root: Path) -> list[str]:
         for seq in sequences:
             for rel_video in seq.get("videos", {}).values():
                 checked_videos += 1
+                if rel_video in seen_video_paths:
+                    continue
+                seen_video_paths.add(rel_video)
                 if not (root / rel_video).exists():
                     fail(errors, f"{run_id}: missing video {rel_video}")
         if checked_videos == 0:
