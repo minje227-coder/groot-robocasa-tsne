@@ -70,7 +70,7 @@
     {
       "id": "baseline_checkpoint_120000_frame",
       "family": "baseline",
-      "label": "baseline_checkpoint_120000_frame",
+      "label": "Baseline 120K",
       "path": "runs/baseline_checkpoint_120000_frame",
       "manifest_id": "f0367e9630",
       "features": [
@@ -82,7 +82,7 @@
     {
       "id": "baseline_checkpoint_60000_frame",
       "family": "baseline",
-      "label": "baseline_checkpoint_60000_frame",
+      "label": "Baseline 60K",
       "path": "runs/baseline_checkpoint_60000_frame",
       "manifest_id": "f0367e9630",
       "features": [

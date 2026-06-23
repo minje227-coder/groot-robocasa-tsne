@@ -23,9 +23,11 @@ def load_expected_counts(root: Path, catalog: dict, run: dict, manifest: dict) -
     """Return expected sequence and point counts for temporal or shared-frame runs."""
     manifest_id = run.get("manifest_id") or manifest.get("manifest_id")
     if catalog.get("version") == 2 and manifest_id:
-        shared_path = root / "data" / "manifests" / f"frame_{manifest_id}.json"
+        shared_path = root / "data" / "official_manifest.json"
         if shared_path.exists():
             shared = load_json(shared_path)
+            if shared.get("manifest_id") not in (None, manifest_id):
+                return EXPECTED_SEQUENCES, EXPECTED_POINTS
             n_sequences = len(shared.get("sequences", []))
             return n_sequences, n_sequences
     return EXPECTED_SEQUENCES, EXPECTED_POINTS

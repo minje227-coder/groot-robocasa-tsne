@@ -7,17 +7,10 @@ URLs:
 - Repo: `https://github.com/minje227-coder/groot-robocasa-tsne`
 - Pages: `https://minje227-coder.github.io/groot-robocasa-tsne/`
 
-Top-level families:
-
-- `baseline/`
-- `MGD/`
-- `RKD/`
-- `MGRKD/`
-
 Published frame viewer:
 
-- `baseline_checkpoint_60000_frame`: raw, processed, action
-- `baseline_checkpoint_120000_frame`: raw, processed, action
+- `Baseline 60K` (`baseline_checkpoint_60000_frame`): raw, processed, action
+- `Baseline 120K` (`baseline_checkpoint_120000_frame`): raw, processed, action
 - `rkd_v2_1_a_phase2_frame`: raw, processed, action
 - `rkd_v2_1_a_phase3_frame`: raw, processed, action
 - `rkd_v2_1_da_phase2_frame`: raw, processed, action
@@ -28,11 +21,14 @@ All runs use the same frame sample manifest:
 
 - 26 RoboCasa `my_atomic26` tasks
 - description-balanced random frame sampling
-- shared manifest `f0367e9630`
+- official shared manifest: `data/official_manifest.json`
+- manifest id `f0367e9630`
 - 7,680 t-SNE points per feature
+- existing video clips under `assets/clips/f0367e9630`
 
-Raw feature caches (`*.npz`) stay in the working tree for later analysis but are
-excluded from git.
+For new frame-level t-SNE exports, reuse `data/official_manifest.json` and the
+existing `assets/clips/f0367e9630` clips. Do not regenerate videos by default;
+run the exporter with the shared manifest and video skipping enabled.
 
 Plan:
 

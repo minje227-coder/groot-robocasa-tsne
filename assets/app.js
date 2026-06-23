@@ -1215,7 +1215,7 @@ function renderVideoStrip(stage) {
       return el("div", { class: "video-card" }, [
         el("div", {
           class: "video-label",
-          text: `${index + 1}. ${selectedRun?.label || selection.runId} / ${cam.replace("robot0_", "")} / frame ${selection.frame}`,
+          text: `${index + 1}. ${selectedRun?.label || selection.runId}`,
         }),
         video,
       ]);
