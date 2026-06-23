@@ -19,6 +19,18 @@ def fail(errors: list[str], message: str) -> None:
     errors.append(message)
 
 
+def load_expected_counts(root: Path, catalog: dict, run: dict, manifest: dict) -> tuple[int, int]:
+    """Return expected sequence and point counts for temporal or shared-frame runs."""
+    manifest_id = run.get("manifest_id") or manifest.get("manifest_id")
+    if catalog.get("version") == 2 and manifest_id:
+        shared_path = root / "data" / "manifests" / f"frame_{manifest_id}.json"
+        if shared_path.exists():
+            shared = load_json(shared_path)
+            n_sequences = len(shared.get("sequences", []))
+            return n_sequences, n_sequences
+    return EXPECTED_SEQUENCES, EXPECTED_POINTS
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     catalog_path = root / "data" / "catalog.json"
@@ -49,8 +61,9 @@ def validate(root: Path) -> list[str]:
             fail(errors, f"{run_id}: missing sequences file")
             continue
         sequences = load_json(seq_path).get("sequences", [])
-        if len(sequences) != EXPECTED_SEQUENCES:
-            fail(errors, f"{run_id}: sequences={len(sequences)} expected={EXPECTED_SEQUENCES}")
+        expected_sequences, expected_points = load_expected_counts(root, catalog, run, manifest)
+        if len(sequences) != expected_sequences:
+            fail(errors, f"{run_id}: sequences={len(sequences)} expected={expected_sequences}")
 
         checked_videos = 0
         for seq in sequences:
@@ -72,8 +85,8 @@ def validate(root: Path) -> list[str]:
                 continue
             payload = load_json(points_path)
             n_points = len(payload.get("points", []))
-            if n_points != EXPECTED_POINTS:
-                fail(errors, f"{run_id}/{feature}: points={n_points} expected={EXPECTED_POINTS}")
+            if n_points != expected_points:
+                fail(errors, f"{run_id}/{feature}: points={n_points} expected={expected_points}")
 
     return errors
 
