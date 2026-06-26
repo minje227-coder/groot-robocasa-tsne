@@ -8,6 +8,30 @@
   ],
   "runs": [
     {
+      "id": "mgrkd_kl_flatten_action_encoder_temp0p1_phase2_frame",
+      "family": "MGRKD",
+      "label": "MGRKD KL temp0.1 phase2",
+      "path": "runs/mgrkd_kl_flatten_action_encoder_temp0p1_phase2_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "mgrkd_kl_flatten_action_encoder_temp0p1_phase3_frame",
+      "family": "MGRKD",
+      "label": "MGRKD KL temp0.1 phase3",
+      "path": "runs/mgrkd_kl_flatten_action_encoder_temp0p1_phase3_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
       "id": "mgrkd_distance_angle_flatten_action_encoder_phase2_frame",
       "family": "MGRKD",
       "label": "MGRKD [DA, Action encoder] Phase 2",

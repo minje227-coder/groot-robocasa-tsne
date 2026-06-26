@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "run_id": "mgrkd_kl_flatten_action_encoder_temp0p1_phase2_frame",
+  "label": "MGRKD KL temp0.1 phase2",
+  "family": "MGRKD",
+  "checkpoint_dir": "/home/seonho/groot_robocasa/robocasa_v2/MGRKD/mgrkd_kl_flatten_action_encoder_temp0p1/default/phase2",
+  "policy_type": "groot_mgrkd",
+  "manifest_id": "f0367e9630",
+  "task_set": "my_atomic26",
+  "seed": 42,
+  "sampling": "desc_random_frame",
+  "samples_per_desc": 100,
+  "pnp_descs_per_task": 5,
+  "action_horizon": 16,
+  "terminal_slack_frames": 8,
+  "fps": 20,
+  "features": [
+    "raw",
+    "processed",
+    "action"
+  ],
+  "sequences_file": "sequences.json",
+  "points_files": {
+    "raw": "points_raw.json",
+    "processed": "points_processed.json",
+    "action": "points_action.json"
+  }
+}
