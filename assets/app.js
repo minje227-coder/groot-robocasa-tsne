@@ -118,7 +118,7 @@ function getRunById(runId) {
   return state.catalog?.runs?.find((run) => run.id === runId) || null;
 }
 
-const familyOrder = ["baseline", "MGRKD", "RKD", "MGD"];
+const familyOrder = ["baseline", "KL", "MGRKD", "RKD", "MGD"];
 const featureOrder = ["raw", "processed", "action"];
 
 function orderIndex(list, value) {
@@ -156,6 +156,7 @@ function sortSelectedCharts() {
 
 const familyLabels = {
   baseline: "Baseline",
+  KL: "KL",
   MGD: "MGD",
   RKD: "RKD",
   MGRKD: "MGRKD",
