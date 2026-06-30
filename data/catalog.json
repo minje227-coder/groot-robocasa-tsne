@@ -5,7 +5,8 @@
     "KL",
     "MGRKD",
     "RKD",
-    "TimeWarping"
+    "TimeWarping",
+    "Official Ckpt"
   ],
   "runs": [
     {
@@ -97,6 +98,18 @@
       "family": "MGRKD",
       "label": "MGRKD [DA, Raw action] Phase 3",
       "path": "runs/mgrkd_distance_angle_flatten_raw_action_phase3_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "official_ckpt_gr00t_n1_5_checkpoint_120000_frame",
+      "family": "Official Ckpt",
+      "label": "Official Ckpt gr00t_n1.5 120K",
+      "path": "runs/official_ckpt_gr00t_n1_5_checkpoint_120000_frame",
       "manifest_id": "f0367e9630",
       "features": [
         "raw",

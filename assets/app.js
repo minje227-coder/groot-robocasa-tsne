@@ -179,7 +179,7 @@ function toggleActionDim(dim, dimCount) {
   renderPanel();
 }
 
-const familyOrder = ["baseline", "KL", "MGRKD", "RKD", "TimeWarping"];
+const familyOrder = ["baseline", "Official Ckpt", "KL", "MGRKD", "RKD", "TimeWarping"];
 const featureOrder = ["raw", "processed", "action"];
 
 function orderIndex(list, value) {
@@ -217,6 +217,7 @@ function sortSelectedCharts() {
 
 const familyLabels = {
   baseline: "Baseline",
+  "Official Ckpt": "Official Ckpt",
   KL: "KL",
   RKD: "RKD",
   MGRKD: "MGRKD",
@@ -559,7 +560,7 @@ function renderShell() {
     el("header", { class: "topbar" }, [
       el("div", { class: "title" }, [
         el("h1", { text: "RoboCasa temporal t-SNE" }),
-        el("p", { text: "Shared viewer for baseline, KL, MGRKD, RKD, and TimeWarping trajectory embeddings." }),
+        el("p", { text: "Shared viewer for baseline, Official Ckpt, KL, MGRKD, RKD, and TimeWarping trajectory embeddings." }),
       ]),
       el("a", { href: "https://github.com/minje227-coder/groot-robocasa-tsne", text: "GitHub" }),
     ]),
