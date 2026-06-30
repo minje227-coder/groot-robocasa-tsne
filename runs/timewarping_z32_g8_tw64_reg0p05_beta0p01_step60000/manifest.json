@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "run_id": "timewarping_z32_g8_tw64_reg0p05_beta0p01_step60000",
+  "label": "TimeWarping z32 g8 tw64 reg0.05 beta0.01 step60000",
+  "family": "TimeWarping",
+  "checkpoint_dir": "/home/seonho/groot_robocasa/TimeWarping/TimewarpVAE/robocasa_vanilla_t16_z32_g8/checkpoint-step-60000-epoch-17.46",
+  "checkpoint_step": 60000,
+  "model_config": {
+    "action_dim": 12,
+    "action_horizon": 16,
+    "latent_dim": 32,
+    "granularity": 8,
+    "beta": 0.01,
+    "time_reg_weight": 0.05
+  },
+  "manifest_id": "official_manifest",
+  "task_set": "my_atomic26",
+  "seed": 42,
+  "sampling": "desc_random_frame",
+  "samples": 7680,
+  "action_horizon": 16,
+  "features": [
+    "timewarp_mu"
+  ],
+  "sequences_file": "sequences.json",
+  "feature_files": {
+    "timewarp_mu": "features_timewarp_mu.npz"
+  },
+  "points_files": {
+    "timewarp_mu": "points_timewarp_mu.json"
+  }
+}

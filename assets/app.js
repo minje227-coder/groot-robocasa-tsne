@@ -118,7 +118,7 @@ function getRunById(runId) {
   return state.catalog?.runs?.find((run) => run.id === runId) || null;
 }
 
-const familyOrder = ["baseline", "KL", "MGRKD", "RKD", "MGD"];
+const familyOrder = ["baseline", "KL", "MGRKD", "RKD", "TimeWarping"];
 const featureOrder = ["raw", "processed", "action"];
 
 function orderIndex(list, value) {
@@ -157,9 +157,9 @@ function sortSelectedCharts() {
 const familyLabels = {
   baseline: "Baseline",
   KL: "KL",
-  MGD: "MGD",
   RKD: "RKD",
   MGRKD: "MGRKD",
+  TimeWarping: "TimeWarping",
 };
 
 function hashParams(extra = {}) {
@@ -493,7 +493,7 @@ function renderShell() {
     el("header", { class: "topbar" }, [
       el("div", { class: "title" }, [
         el("h1", { text: "RoboCasa temporal t-SNE" }),
-        el("p", { text: "Shared viewer for baseline, MGD, and RKD trajectory embeddings." }),
+        el("p", { text: "Shared viewer for baseline, KL, MGRKD, RKD, and TimeWarping trajectory embeddings." }),
       ]),
       el("a", { href: "https://github.com/minje227-coder/groot-robocasa-tsne", text: "GitHub" }),
     ]),

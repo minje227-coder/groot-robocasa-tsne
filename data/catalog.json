@@ -185,6 +185,46 @@
       "features": [
         "timewarp_mu"
       ]
+    },
+    {
+      "id": "timewarping_z8_g8_h32_tw64_reg0p05_beta0p01_step60000",
+      "family": "TimeWarping",
+      "label": "TimeWarping z8 g8 h32 tw64 reg0.05 beta0.01 step60000",
+      "path": "runs/timewarping_z8_g8_h32_tw64_reg0p05_beta0p01_step60000",
+      "manifest_id": "official_manifest",
+      "features": [
+        "timewarp_mu"
+      ]
+    },
+    {
+      "id": "timewarping_z8_g8_h32_tw64_reg0p001_beta0p01_step60000",
+      "family": "TimeWarping",
+      "label": "TimeWarping z8 g8 h32 tw64 reg0.001 beta0.01 step60000",
+      "path": "runs/timewarping_z8_g8_h32_tw64_reg0p001_beta0p01_step60000",
+      "manifest_id": "official_manifest",
+      "features": [
+        "timewarp_mu"
+      ]
+    },
+    {
+      "id": "timewarping_z8_g8_h128_tw64_reg0p05_beta0p01_step60000",
+      "family": "TimeWarping",
+      "label": "TimeWarping z8 g8 h128 tw64 reg0.05 beta0.01 step60000",
+      "path": "runs/timewarping_z8_g8_h128_tw64_reg0p05_beta0p01_step60000",
+      "manifest_id": "official_manifest",
+      "features": [
+        "timewarp_mu"
+      ]
+    },
+    {
+      "id": "timewarping_z32_g8_tw64_reg0p05_beta0p01_step60000",
+      "family": "TimeWarping",
+      "label": "TimeWarping z32 g8 tw64 reg0.05 beta0.01 step60000",
+      "path": "runs/timewarping_z32_g8_tw64_reg0p05_beta0p01_step60000",
+      "manifest_id": "official_manifest",
+      "features": [
+        "timewarp_mu"
+      ]
     }
   ]
 }
