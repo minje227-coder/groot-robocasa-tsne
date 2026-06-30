@@ -9,6 +9,30 @@
   ],
   "runs": [
     {
+      "id": "rkd_v2_1_kl_dtw_rowwise_control_gated_phase2_frame",
+      "family": "KL",
+      "label": "RowWiseControlGated Phase 2",
+      "path": "runs/rkd_v2_1_kl_dtw_rowwise_control_gated_phase2_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "rkd_v2_1_kl_dtw_rowwise_control_gated_phase3_frame",
+      "family": "KL",
+      "label": "RowWiseControlGated Phase 3",
+      "path": "runs/rkd_v2_1_kl_dtw_rowwise_control_gated_phase3_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
       "id": "mgrkd_kl_flatten_action_encoder_temp0p1_phase2_frame",
       "family": "MGRKD",
       "label": "MGRKD KL temp0.1 phase2",
@@ -81,30 +105,6 @@
       ]
     },
     {
-      "id": "rkd_v2_1_kl_dtw_rowwise_control_gated_phase2_frame",
-      "family": "KL",
-      "label": "RowWiseControlGated Phase 2",
-      "path": "runs/rkd_v2_1_kl_dtw_rowwise_control_gated_phase2_frame",
-      "manifest_id": "f0367e9630",
-      "features": [
-        "raw",
-        "processed",
-        "action"
-      ]
-    },
-    {
-      "id": "rkd_v2_1_kl_dtw_rowwise_control_gated_phase3_frame",
-      "family": "KL",
-      "label": "RowWiseControlGated Phase 3",
-      "path": "runs/rkd_v2_1_kl_dtw_rowwise_control_gated_phase3_frame",
-      "manifest_id": "f0367e9630",
-      "features": [
-        "raw",
-        "processed",
-        "action"
-      ]
-    },
-    {
       "id": "rkd_v2_1_a_phase2_frame",
       "family": "RKD",
       "label": "RKD_v2.1_A_phase2_frame",
@@ -153,10 +153,10 @@
       ]
     },
     {
-      "id": "baseline_checkpoint_120000_frame",
-      "family": "baseline",
-      "label": "Baseline 120K",
-      "path": "runs/baseline_checkpoint_120000_frame",
+      "id": "rkdv3_timewarp_vae_da_aphead_phase2_frame",
+      "family": "TimeWarping",
+      "label": "RKDv3 TimewarpVAE DA APHead phase2",
+      "path": "runs/rkdv3_timewarp_vae_da_aphead_phase2_frame",
       "manifest_id": "f0367e9630",
       "features": [
         "raw",
@@ -165,15 +165,33 @@
       ]
     },
     {
-      "id": "baseline_checkpoint_60000_frame",
-      "family": "baseline",
-      "label": "Baseline 60K",
-      "path": "runs/baseline_checkpoint_60000_frame",
-      "manifest_id": "f0367e9630",
+      "id": "timewarping_z32_g8_tw64_reg0p05_beta0p01_step60000",
+      "family": "TimeWarping",
+      "label": "TimeWarping z32 g8 tw64 reg0.05 beta0.01 step60000",
+      "path": "runs/timewarping_z32_g8_tw64_reg0p05_beta0p01_step60000",
+      "manifest_id": "official_manifest",
       "features": [
-        "raw",
-        "processed",
-        "action"
+        "timewarp_mu"
+      ]
+    },
+    {
+      "id": "timewarping_z8_g8_h128_tw64_reg0p05_beta0p01_step60000",
+      "family": "TimeWarping",
+      "label": "TimeWarping z8 g8 h128 tw64 reg0.05 beta0.01 step60000",
+      "path": "runs/timewarping_z8_g8_h128_tw64_reg0p05_beta0p01_step60000",
+      "manifest_id": "official_manifest",
+      "features": [
+        "timewarp_mu"
+      ]
+    },
+    {
+      "id": "timewarping_z8_g8_h32_tw64_reg0p001_beta0p01_step60000",
+      "family": "TimeWarping",
+      "label": "TimeWarping z8 g8 h32 tw64 reg0.001 beta0.01 step60000",
+      "path": "runs/timewarping_z8_g8_h32_tw64_reg0p001_beta0p01_step60000",
+      "manifest_id": "official_manifest",
+      "features": [
+        "timewarp_mu"
       ]
     },
     {
@@ -197,33 +215,27 @@
       ]
     },
     {
-      "id": "timewarping_z8_g8_h32_tw64_reg0p001_beta0p01_step60000",
-      "family": "TimeWarping",
-      "label": "TimeWarping z8 g8 h32 tw64 reg0.001 beta0.01 step60000",
-      "path": "runs/timewarping_z8_g8_h32_tw64_reg0p001_beta0p01_step60000",
-      "manifest_id": "official_manifest",
+      "id": "baseline_checkpoint_120000_frame",
+      "family": "baseline",
+      "label": "Baseline 120K",
+      "path": "runs/baseline_checkpoint_120000_frame",
+      "manifest_id": "f0367e9630",
       "features": [
-        "timewarp_mu"
+        "raw",
+        "processed",
+        "action"
       ]
     },
     {
-      "id": "timewarping_z8_g8_h128_tw64_reg0p05_beta0p01_step60000",
-      "family": "TimeWarping",
-      "label": "TimeWarping z8 g8 h128 tw64 reg0.05 beta0.01 step60000",
-      "path": "runs/timewarping_z8_g8_h128_tw64_reg0p05_beta0p01_step60000",
-      "manifest_id": "official_manifest",
+      "id": "baseline_checkpoint_60000_frame",
+      "family": "baseline",
+      "label": "Baseline 60K",
+      "path": "runs/baseline_checkpoint_60000_frame",
+      "manifest_id": "f0367e9630",
       "features": [
-        "timewarp_mu"
-      ]
-    },
-    {
-      "id": "timewarping_z32_g8_tw64_reg0p05_beta0p01_step60000",
-      "family": "TimeWarping",
-      "label": "TimeWarping z32 g8 tw64 reg0.05 beta0.01 step60000",
-      "path": "runs/timewarping_z32_g8_tw64_reg0p05_beta0p01_step60000",
-      "manifest_id": "official_manifest",
-      "features": [
-        "timewarp_mu"
+        "raw",
+        "processed",
+        "action"
       ]
     }
   ]
