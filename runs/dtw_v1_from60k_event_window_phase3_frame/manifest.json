@@ -2,7 +2,7 @@
   "version": 1,
   "run_id": "dtw_v1_from60k_event_window_phase3_frame",
   "label": "DTW v1 from60k EventWindow Phase 3",
-  "family": "RKD",
+  "family": "KL",
   "checkpoint_dir": "/home/ext_minje/groot_robocasa/robocasa_v2/DTW/DTW_v1/from_60k/EventWindowTimeWeightedRowWiseDTW/default/phase3",
   "policy_type": "groot_rkd",
   "manifest_id": "f0367e9630",
@@ -15,10 +15,12 @@
   "terminal_slack_frames": 8,
   "fps": 20,
   "features": [
-    "action"
+    "action",
+    "processed"
   ],
-  "sequences_file": "../../data/official_manifest.json",
+  "sequences_file": "sequences.json",
   "points_files": {
-    "action": "points_action.json"
+    "action": "points_action.json",
+    "processed": "points_processed.json"
   }
 }
