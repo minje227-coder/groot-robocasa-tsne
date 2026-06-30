@@ -8,6 +8,10 @@ const state = {
   runManifestsById: new Map(),
   sequencesByRunId: new Map(),
   pointsByChart: new Map(),
+  actionChunks: null,
+  actionChunksLoading: false,
+  actionChunksError: null,
+  visibleActionDims: null,
   selectedCharts: [],
   preferredFeatures: [],
   cam: "robot0_agentview_left",
@@ -118,6 +122,63 @@ function getRunById(runId) {
   return state.catalog?.runs?.find((run) => run.id === runId) || null;
 }
 
+async function loadActionChunks() {
+  if (state.actionChunks || state.actionChunksLoading) return;
+  state.actionChunksLoading = true;
+  state.actionChunksError = null;
+  try {
+    const payload = await fetchJson("./data/action_chunks/official_manifest_transformed_actions.json");
+    const bySeq = new Map();
+    (payload.seq_ids || []).forEach((seqId, index) => {
+      bySeq.set(Number(seqId), {
+        seqId: Number(seqId),
+        anchor: Number(payload.anchor_ids?.[index] ?? 0),
+        frame: Number(payload.frame_indices?.[index] ?? 0),
+        values: payload.chunks?.[index] || [],
+      });
+    });
+    state.actionChunks = { ...payload, bySeq };
+  } catch (error) {
+    state.actionChunksError = error;
+  } finally {
+    state.actionChunksLoading = false;
+  }
+}
+
+function getActionChunk(selection) {
+  return state.actionChunks?.bySeq?.get(Number(selection?.seq)) || null;
+}
+
+function actionDimLabels(dimCount) {
+  const labelsByKey = {
+    "action.end_effector_position": ["eef pos x", "eef pos y", "eef pos z"],
+    "action.end_effector_rotation": ["eef rot x", "eef rot y", "eef rot z"],
+    "action.gripper_close": ["gripper"],
+    "action.base_motion": ["base 0", "base 1", "base 2", "base 3"],
+    "action.control_mode": ["control"],
+  };
+  const labels = [];
+  for (const key of state.actionChunks?.action_keys || []) {
+    labels.push(...(labelsByKey[key] || [key.replace(/^action\./, "")]));
+  }
+  while (labels.length < dimCount) labels.push(`dim ${labels.length}`);
+  return labels.slice(0, dimCount);
+}
+
+function visibleActionDims(dimCount) {
+  if (!state.visibleActionDims) {
+    state.visibleActionDims = new Set(Array.from({ length: dimCount }, (_, index) => index));
+  }
+  return state.visibleActionDims;
+}
+
+function toggleActionDim(dim, dimCount) {
+  const visible = visibleActionDims(dimCount);
+  if (visible.has(dim)) visible.delete(dim);
+  else visible.add(dim);
+  renderPanel();
+}
+
 const familyOrder = ["baseline", "KL", "MGRKD", "RKD", "TimeWarping"];
 const featureOrder = ["raw", "processed", "action"];
 
@@ -174,6 +235,10 @@ function resetRunState() {
   state.runManifestsById.clear();
   state.sequencesByRunId.clear();
   state.pointsByChart.clear();
+  state.actionChunks = null;
+  state.actionChunksLoading = false;
+  state.actionChunksError = null;
+  state.visibleActionDims = null;
   state.selectedCharts = [];
   state.preferredFeatures = [];
   clearSelectedPoints();
@@ -264,7 +329,8 @@ function interpolatePalette(palette, t) {
 }
 
 function numericValue(value) {
-  return Number.isFinite(value) ? value : null;
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function getPointTimestep(point) {
@@ -1202,6 +1268,12 @@ function renderVideoStrip(stage) {
         loop: "loop",
         muted: "muted",
         playsinline: "playsinline",
+        "data-sync-video": "1",
+        "data-run-id": selection.runId,
+        "data-seq": String(selection.seq),
+        "data-selection-key": selectionKey(selection),
+        "data-start-frame": String(videoStartFrame),
+        "data-fps": String(fps),
         src: `./${seq.videos[cam]}`,
         ...(state.selectionMode === "multi"
           ? { style: `border-color:${selectionAccent};box-shadow:0 0 0 1px ${selectionAccent};` }
@@ -1210,9 +1282,14 @@ function renderVideoStrip(stage) {
       video.addEventListener("loadedmetadata", () => {
         const maxTime = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.05) : currentTime;
         video.currentTime = Math.min(currentTime, maxTime);
+        updateActionChunkCursorFromVideo(video);
         const playPromise = video.play();
         if (playPromise && typeof playPromise.catch === "function") playPromise.catch(() => {});
       });
+      video.addEventListener("timeupdate", () => syncVideosFrom(video));
+      video.addEventListener("seeking", () => syncVideosFrom(video, { forceTime: true }));
+      video.addEventListener("play", () => syncVideosFrom(video, { syncPlayback: true }));
+      video.addEventListener("pause", () => syncVideosFrom(video, { syncPlayback: true }));
       return el("div", { class: "video-card" }, [
         el("div", {
           class: "video-label",
@@ -1225,8 +1302,10 @@ function renderVideoStrip(stage) {
   if (cards.length) stage.appendChild(el("div", { class: "video-strip" }, cards));
 }
 
-function getSyncVideos() {
-  return [...document.querySelectorAll("video[data-sync-video='1']")];
+function getSyncVideos(selectionKeyValue = null) {
+  const videos = [...document.querySelectorAll("video[data-sync-video='1']")];
+  if (!selectionKeyValue) return videos;
+  return videos.filter((video) => video.dataset.selectionKey === selectionKeyValue);
 }
 
 function syncVideosFrom(source, options = {}) {
@@ -1235,7 +1314,7 @@ function syncVideosFrom(source, options = {}) {
   const threshold = forceTime ? 0.001 : 0.05;
   state.syncingVideos = true;
   try {
-    for (const video of getSyncVideos()) {
+    for (const video of getSyncVideos(source.dataset.selectionKey)) {
       if (video === source) continue;
       if (Math.abs(video.currentTime - source.currentTime) > threshold) {
         video.currentTime = source.currentTime;
@@ -1760,16 +1839,22 @@ function nearestPointForFrame(seqId, frame) {
 }
 
 function syncSelectionToVideo(video) {
-  if (!state.selected) return;
-  const manifest = state.runManifestsById.get(state.selected.runId) || state.runManifest;
+  const selectionIndex = state.selectedPoints.findIndex((point) => selectionKey(point) === video.dataset.selectionKey);
+  const selection = selectionIndex >= 0 ? state.selectedPoints[selectionIndex] : state.selected;
+  if (!selection) return;
+  updateActionChunkCursorFromVideo(video);
+  const manifest = state.runManifestsById.get(selection.runId) || state.runManifest;
   const fps = manifest.fps || 20;
-  const seq = getSequenceById(state.selected.runId, state.selected.seq);
-  const videoStartFrame = numericValue(seq?.video_start_frame) ?? 0;
+  const seq = getSequenceById(selection.runId, selection.seq);
+  const videoStartFrame = numericValue(video.dataset.startFrame) ?? numericValue(seq?.video_start_frame) ?? 0;
   const frame = Math.round(video.currentTime * fps) + videoStartFrame;
-  const point = nearestPointForFrame(state.selected.seq, frame);
+  const point = nearestPointForFrame(selection.seq, frame);
   if (!point || isSelected(point)) return;
-  const nextSelection = buildSelection(point.runId || state.selected.runId, point);
-  setSelectedPoints([...state.selectedPoints.slice(0, -1), nextSelection]);
+  const nextSelection = buildSelection(point.runId || selection.runId, point);
+  const nextPoints = [...state.selectedPoints];
+  if (selectionIndex >= 0) nextPoints[selectionIndex] = nextSelection;
+  else nextPoints.push(nextSelection);
+  setSelectedPoints(nextPoints);
   updateSelectedMarker();
   updateSelectionFrame();
 }
@@ -1781,6 +1866,35 @@ function updateSelectedMarker() {
 function updateSelectionFrame() {
   const frameNode = document.getElementById("selection-frame");
   if (frameNode && state.selected) frameNode.textContent = String(state.selected.frame);
+}
+
+function updateActionChunkCursorFromVideo(video) {
+  if (!video) return;
+  const selection = state.selected;
+  if (!selection) return;
+  if (video.dataset.selectionKey !== selectionKey(selection)) return;
+  if (video.dataset.runId !== selection.runId) return;
+  if (Number(video.dataset.seq) !== Number(selection.seq)) return;
+  const fps = numericValue(video.dataset.fps) || 20;
+  const chunk = getActionChunk(selection);
+  const horizon = Math.max(1, chunk?.values?.length || 1);
+  const timestep = clamp(video.currentTime * fps, 0, Math.max(0, horizon - 1));
+  updateActionChunkCursor(timestep);
+}
+
+function updateActionChunkCursor(timestep) {
+  const svg = document.querySelector(".action-chunk-chart");
+  if (!svg) return;
+  const playhead = svg.querySelector(".action-playhead[data-action-playhead='1']");
+  const band = svg.querySelector(".action-playhead-band[data-action-playhead-band='1']");
+  if (!playhead || !band) return;
+  const left = numericValue(svg.dataset.plotLeft) ?? 0;
+  const width = numericValue(svg.dataset.plotWidth) ?? 0;
+  const horizon = Math.max(1, (numericValue(svg.dataset.horizon) ?? 1) - 1);
+  const x = left + (clamp(timestep, 0, horizon) / horizon) * width;
+  playhead.setAttribute("x1", x.toFixed(2));
+  playhead.setAttribute("x2", x.toFixed(2));
+  band.setAttribute("x", (x - 2.5).toFixed(2));
 }
 
 function preserveTaskPanelScroll() {
@@ -1832,6 +1946,7 @@ function renderPanel() {
       ["Frame", String(state.selected.frame), "selection-frame"],
     ]),
   ]));
+  panel.appendChild(renderActionChunkPanel());
   if (!Object.keys(seq.videos || {}).length) {
     panel.appendChild(el("p", { class: "status", text: "No video available for this sequence." }));
   }
@@ -1840,6 +1955,150 @@ function renderPanel() {
     const taskPanel = panel.querySelector(".task-panel");
     if (taskPanel) taskPanel.scrollTop = savedTaskPanelScrollTop;
   });
+}
+
+function renderActionChunkPanel() {
+  const body = el("div", { class: "action-chunk-body" });
+  const section = el("section", { class: "action-chunk-panel" }, [
+    el("h3", { text: "Transformed Action Chunk" }),
+    body,
+  ]);
+  if (!state.actionChunks && !state.actionChunksLoading && !state.actionChunksError) {
+    loadActionChunks().then(renderPanel);
+  }
+  if (state.actionChunksLoading) {
+    body.appendChild(el("p", { class: "status", text: "Loading action chunk..." }));
+    return section;
+  }
+  if (state.actionChunksError) {
+    body.appendChild(el("p", { class: "status", text: "Action chunk data is not available." }));
+    return section;
+  }
+  const chunks = state.selectedPoints
+    .map((selection, index) => ({ selection, index, chunk: getActionChunk(selection) }))
+    .filter((item) => item.chunk?.values?.length);
+  if (!chunks.length) {
+    body.appendChild(el("p", { class: "status", text: "No action chunk for this point." }));
+    return section;
+  }
+  body.appendChild(renderActionChunkChart(chunks));
+  body.appendChild(renderActionDimLegend(chunks));
+  body.appendChild(el("p", {
+    class: "action-chunk-meta",
+    text: `T=${chunks[0].chunk.values.length}, dim=${chunks[0].chunk.values[0]?.length || 0}`,
+  }));
+  return section;
+}
+
+function renderActionChunkChart(chunks) {
+  const width = 320;
+  const height = 170;
+  const pad = { left: 34, right: 10, top: 12, bottom: 24 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const dimCount = chunks[0].chunk.values[0]?.length || 0;
+  const visibleDims = visibleActionDims(dimCount);
+  const flat = chunks.flatMap(({ chunk }) => (
+    chunk.values.flatMap((row) => row.filter((_, dim) => visibleDims.has(dim)))
+  )).map(Number).filter((value) => Number.isFinite(value));
+  let minValue = Math.min(...flat);
+  let maxValue = Math.max(...flat);
+  if (!Number.isFinite(minValue) || !Number.isFinite(maxValue)) {
+    minValue = -1;
+    maxValue = 1;
+  }
+  if (Math.abs(maxValue - minValue) < 1e-9) {
+    minValue -= 1;
+    maxValue += 1;
+  }
+  const horizon = Math.max(1, chunks[0].chunk.values.length - 1);
+  const xFor = (t) => pad.left + (t / horizon) * plotWidth;
+  const yFor = (value) => pad.top + (1 - (value - minValue) / (maxValue - minValue)) * plotHeight;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("class", "action-chunk-chart");
+  svg.dataset.plotLeft = String(pad.left);
+  svg.dataset.plotWidth = String(plotWidth);
+  svg.dataset.horizon = String(chunks[0].chunk.values.length);
+  svg.appendChild(svgLine(pad.left, pad.top, pad.left, height - pad.bottom, "action-axis"));
+  svg.appendChild(svgLine(pad.left, height - pad.bottom, width - pad.right, height - pad.bottom, "action-axis"));
+  svg.appendChild(svgText(4, pad.top + 4, maxValue.toFixed(2), "action-axis-label"));
+  svg.appendChild(svgText(4, height - pad.bottom, minValue.toFixed(2), "action-axis-label"));
+  const labels = actionDimLabels(dimCount);
+  const dashStyles = ["", "5 3", "1.5 3", "8 3 2 3"];
+  chunks.forEach(({ selection, index, chunk }) => {
+    for (let dim = 0; dim < dimCount; dim++) {
+      if (!visibleDims.has(dim)) continue;
+      const points = chunk.values
+        .map((row, t) => `${xFor(t).toFixed(2)},${yFor(Number(row[dim])).toFixed(2)}`)
+        .join(" ");
+      const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      polyline.setAttribute("points", points);
+      polyline.setAttribute("class", "action-line");
+      polyline.setAttribute("stroke", colors[dim % colors.length]);
+      polyline.setAttribute("stroke-dasharray", dashStyles[index % dashStyles.length]);
+      polyline.setAttribute("opacity", String(Math.max(0.46, 0.9 - index * 0.12)));
+      polyline.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"))
+        .textContent = `${index + 1}. ${labels[dim]}`;
+      svg.appendChild(polyline);
+    }
+  });
+  const band = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  band.setAttribute("x", String(pad.left - 2.5));
+  band.setAttribute("y", String(pad.top));
+  band.setAttribute("width", "5");
+  band.setAttribute("height", String(plotHeight));
+  band.setAttribute("class", "action-playhead-band");
+  band.setAttribute("data-action-playhead-band", "1");
+  svg.appendChild(band);
+  const playhead = svgLine(pad.left, pad.top, pad.left, height - pad.bottom, "action-playhead");
+  playhead.setAttribute("data-action-playhead", "1");
+  svg.appendChild(playhead);
+  return svg;
+}
+
+function renderActionDimLegend(chunks) {
+  const dimCount = chunks[0].chunk.values[0]?.length || 0;
+  const labels = actionDimLabels(dimCount);
+  const visibleDims = visibleActionDims(dimCount);
+  const buttons = labels.map((label, dim) => el("button", {
+    class: `action-dim-toggle${visibleDims.has(dim) ? " active" : ""}`,
+    title: label,
+    onclick: () => toggleActionDim(dim, dimCount),
+  }, [
+    el("span", { class: "action-dim-swatch", style: `background:${colors[dim % colors.length]}` }),
+    el("span", { text: label }),
+  ]));
+  const dashItems = chunks.slice(0, 4).map(({ selection, index }) => {
+    const seq = getSequenceById(selection.runId, selection.seq);
+    return el("span", { class: "action-selection-style" }, [
+      el("span", { class: `action-style-line style-${index % 4}` }),
+      el("span", { text: `${index + 1}. ${seq?.task_name || ""}` }),
+    ]);
+  });
+  return el("div", { class: "action-legend" }, [
+    el("div", { class: "action-dim-toggles" }, buttons),
+    ...(chunks.length > 1 ? [el("div", { class: "action-selection-legend" }, dashItems)] : []),
+  ]);
+}
+
+function svgLine(x1, y1, x2, y2, className) {
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", String(x1));
+  line.setAttribute("y1", String(y1));
+  line.setAttribute("x2", String(x2));
+  line.setAttribute("y2", String(y2));
+  line.setAttribute("class", className);
+  return line;
+}
+
+function svgText(x, y, text, className) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  node.setAttribute("x", String(x));
+  node.setAttribute("y", String(y));
+  node.setAttribute("class", className);
+  node.textContent = text;
+  return node;
 }
 
 function renderTaskDescriptionPanel(panel) {

@@ -635,6 +635,142 @@ body.resizing-panel {
   margin-top: 3px;
 }
 
+.action-chunk-panel {
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.action-chunk-panel h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.action-chunk-body {
+  min-width: 0;
+}
+
+.action-chunk-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 190px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.action-axis {
+  stroke: #94a3b8;
+  stroke-width: 1;
+}
+
+.action-axis-label {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.action-line {
+  fill: none;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.82;
+}
+
+.action-playhead-band {
+  fill: rgba(100, 116, 139, 0.08);
+  pointer-events: none;
+}
+
+.action-playhead {
+  stroke: rgba(100, 116, 139, 0.34);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.action-legend {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.action-dim-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.action-dim-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 4px 7px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.action-dim-toggle:not(.active) {
+  color: var(--muted);
+  opacity: 0.48;
+}
+
+.action-dim-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.action-selection-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.action-selection-style {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.action-style-line {
+  width: 24px;
+  border-top: 2px solid var(--ink);
+}
+
+.action-style-line.style-1 {
+  border-top-style: dashed;
+}
+
+.action-style-line.style-2 {
+  border-top-style: dotted;
+}
+
+.action-style-line.style-3 {
+  border-top: 0;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ink) 0 8px,
+    transparent 8px 11px,
+    var(--ink) 11px 13px,
+    transparent 13px 16px
+  );
+}
+
+.action-chunk-meta {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .video-strip + .tabs + .chart-wrap {
   height: calc(100vh - 360px);
   min-height: 380px;
