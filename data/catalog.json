@@ -306,6 +306,30 @@
       ]
     },
     {
+      "id": "atomic65_baseline_checkpoint_120000_frame",
+      "family": "baseline",
+      "label": "Atomic65 Baseline 120K",
+      "path": "runs/atomic65_baseline_checkpoint_120000_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "atomic65_baseline_checkpoint_60000_frame",
+      "family": "baseline",
+      "label": "Atomic65 Baseline 60K",
+      "path": "runs/atomic65_baseline_checkpoint_60000_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
       "id": "baseline_checkpoint_120000_frame",
       "family": "baseline",
       "label": "Baseline 120K",
