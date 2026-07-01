@@ -10,27 +10,69 @@
   ],
   "runs": [
     {
-      "id": "rkd_v2_1_kl_dtw_rowwise_control_gated_phase2_frame",
+      "id": "dtw_v1_from60k_event_window_phase2_frame",
       "family": "KL",
-      "label": "RowWiseControlGated Phase 2",
-      "path": "runs/rkd_v2_1_kl_dtw_rowwise_control_gated_phase2_frame",
+      "label": "DTW v1 from60k EventWindow Phase 2",
+      "path": "runs/dtw_v1_from60k_event_window_phase2_frame",
       "manifest_id": "f0367e9630",
       "features": [
-        "raw",
-        "processed",
-        "action"
+        "action",
+        "processed"
       ]
     },
     {
-      "id": "rkd_v2_1_kl_dtw_rowwise_control_gated_phase3_frame",
+      "id": "dtw_v1_from60k_event_window_phase3_frame",
       "family": "KL",
-      "label": "RowWiseControlGated Phase 3",
-      "path": "runs/rkd_v2_1_kl_dtw_rowwise_control_gated_phase3_frame",
+      "label": "DTW v1 from60k EventWindow Phase 3",
+      "path": "runs/dtw_v1_from60k_event_window_phase3_frame",
       "manifest_id": "f0367e9630",
       "features": [
-        "raw",
-        "processed",
-        "action"
+        "action",
+        "processed"
+      ]
+    },
+    {
+      "id": "dtw_v1_from60k_rowwise_adaptive_phase2_frame",
+      "family": "KL",
+      "label": "DTW v1 from60k RowWiseAdaptive Phase 2",
+      "path": "runs/dtw_v1_from60k_rowwise_adaptive_phase2_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "action",
+        "processed"
+      ]
+    },
+    {
+      "id": "dtw_v1_from60k_rowwise_adaptive_phase3_frame",
+      "family": "KL",
+      "label": "DTW v1 from60k RowWiseAdaptive Phase 3",
+      "path": "runs/dtw_v1_from60k_rowwise_adaptive_phase3_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "action",
+        "processed"
+      ]
+    },
+    {
+      "id": "dtw_v1_from60k_timeweighted_phase2_frame",
+      "family": "KL",
+      "label": "DTW v1 from60k TimeWeighted Phase 2",
+      "path": "runs/dtw_v1_from60k_timeweighted_phase2_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "action",
+        "processed"
+      ]
+    },
+    {
+      "id": "dtw_v1_from60k_timeweighted_phase3_frame",
+      "family": "KL",
+      "label": "DTW v1 from60k TimeWeighted Phase 3",
+      "path": "runs/dtw_v1_from60k_timeweighted_phase3_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "action",
+        "processed"
       ]
     },
     {
@@ -50,6 +92,30 @@
       "family": "KL",
       "label": "MGRKD KL temp0.1 phase3",
       "path": "runs/mgrkd_kl_flatten_action_encoder_temp0p1_phase3_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "rkd_v2_1_kl_dtw_rowwise_control_gated_phase2_frame",
+      "family": "KL",
+      "label": "RowWiseControlGated Phase 2",
+      "path": "runs/rkd_v2_1_kl_dtw_rowwise_control_gated_phase2_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "rkd_v2_1_kl_dtw_rowwise_control_gated_phase3_frame",
+      "family": "KL",
+      "label": "RowWiseControlGated Phase 3",
+      "path": "runs/rkd_v2_1_kl_dtw_rowwise_control_gated_phase3_frame",
       "manifest_id": "f0367e9630",
       "features": [
         "raw",
@@ -118,72 +184,6 @@
       ]
     },
     {
-      "id": "dtw_v1_from60k_event_window_phase2_frame",
-      "family": "KL",
-      "label": "DTW v1 from60k EventWindow Phase 2",
-      "path": "runs/dtw_v1_from60k_event_window_phase2_frame",
-      "manifest_id": "f0367e9630",
-      "features": [
-        "action",
-        "processed"
-      ]
-    },
-    {
-      "id": "dtw_v1_from60k_event_window_phase3_frame",
-      "family": "KL",
-      "label": "DTW v1 from60k EventWindow Phase 3",
-      "path": "runs/dtw_v1_from60k_event_window_phase3_frame",
-      "manifest_id": "f0367e9630",
-      "features": [
-        "action",
-        "processed"
-      ]
-    },
-    {
-      "id": "dtw_v1_from60k_rowwise_adaptive_phase2_frame",
-      "family": "KL",
-      "label": "DTW v1 from60k RowWiseAdaptive Phase 2",
-      "path": "runs/dtw_v1_from60k_rowwise_adaptive_phase2_frame",
-      "manifest_id": "f0367e9630",
-      "features": [
-        "action",
-        "processed"
-      ]
-    },
-    {
-      "id": "dtw_v1_from60k_rowwise_adaptive_phase3_frame",
-      "family": "KL",
-      "label": "DTW v1 from60k RowWiseAdaptive Phase 3",
-      "path": "runs/dtw_v1_from60k_rowwise_adaptive_phase3_frame",
-      "manifest_id": "f0367e9630",
-      "features": [
-        "action",
-        "processed"
-      ]
-    },
-    {
-      "id": "dtw_v1_from60k_timeweighted_phase2_frame",
-      "family": "KL",
-      "label": "DTW v1 from60k TimeWeighted Phase 2",
-      "path": "runs/dtw_v1_from60k_timeweighted_phase2_frame",
-      "manifest_id": "f0367e9630",
-      "features": [
-        "action",
-        "processed"
-      ]
-    },
-    {
-      "id": "dtw_v1_from60k_timeweighted_phase3_frame",
-      "family": "KL",
-      "label": "DTW v1 from60k TimeWeighted Phase 3",
-      "path": "runs/dtw_v1_from60k_timeweighted_phase3_frame",
-      "manifest_id": "f0367e9630",
-      "features": [
-        "action",
-        "processed"
-      ]
-    },
-    {
       "id": "rkd_v2_1_a_phase2_frame",
       "family": "RKD",
       "label": "RKD_v2.1_A_phase2_frame",
@@ -236,6 +236,18 @@
       "family": "TimeWarping",
       "label": "RKDv3 TimewarpVAE DA APHead phase2",
       "path": "runs/rkdv3_timewarp_vae_da_aphead_phase2_frame",
+      "manifest_id": "f0367e9630",
+      "features": [
+        "raw",
+        "processed",
+        "action"
+      ]
+    },
+    {
+      "id": "rkdv3_timewarp_vae_da_aphead_phase3_frame",
+      "family": "TimeWarping",
+      "label": "RKDv3 TimewarpVAE DA APHead phase3",
+      "path": "runs/rkdv3_timewarp_vae_da_aphead_phase3_frame",
       "manifest_id": "f0367e9630",
       "features": [
         "raw",
